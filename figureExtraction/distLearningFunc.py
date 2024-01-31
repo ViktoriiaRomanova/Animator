@@ -8,6 +8,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
+from torchvision import transforms
 from datetime import datetime
 
 from processingDataSet import MaskDataset
@@ -28,8 +29,9 @@ def IoU(pred: torch.tensor, real: torch.tensor,
 
 def fit_eval_epoch(model: DDP,
                    loss_func: nn.Module, metric_func: Any, device: torch.device,
-                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None, scaler = None,
-                   prof = None) -> Tuple[torch.tensor, torch.tensor]:
+                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None,
+                   scaler: Optional[torch.cuda.amp.GradScaler] = None,
+                   prof: Optional[torch.profiler.profile] = None) -> Tuple[torch.tensor, torch.tensor]:
     """
         Make train/eval operations per epoch.
 
@@ -96,8 +98,8 @@ def prepare_dataloader(data: MaskDataset, rank: int,
     data_loader = DataLoader(data, batch_size = batch_size,
                              shuffle = False, drop_last = True,
                              sampler = sampler, pin_memory = True,
-                             num_workers = 4,
-                             prefetch_factor = 16,
+                             num_workers = 6,
+                             prefetch_factor = 36,
                              persistent_workers = True,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader
@@ -129,20 +131,34 @@ def start_profiler() -> torch.profiler.profile:
     prof.start()
     return prof
 
-def worker(rank: int, world_size: int, train_data: MaskDataset,
-           val_data: MaskDataset, batch_size: int,
+
+def worker(rank: int, world_size: int, train_data: List[str],
+           val_data: List[str], batch_size: int,
            seed: int, epochs: int, pretrained: Optional[str] = None) -> None:
     """Describe training process which will be implemented for each worker."""
     # Setup process group, for each worker
     setup(rank, world_size)
     
     device = torch.device(rank)
-
-    # prepare data
-    train_loader = prepare_dataloader(train_data, rank, world_size, batch_size, seed)
-    val_loader = prepare_dataloader(val_data, rank, world_size, batch_size, seed)      
-    
     start_epoch = 0
+    
+    data_path = '/home/jupyter/mnt/datasets/Segmentation/Training' # Path to dataset
+    traind_weights_dir = 'train_checkpoints/' # Directory to store trained model weights
+    pretraind_weights_path = 'weights/pretrained_encoder_weights_DEFAULT.pt' # Diectory with loaded encoder weights from pytorch
+    
+    
+    # prepare data
+    transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(p = 0.5),
+    transforms.RandomVerticalFlip(p = 0.5),
+    transforms.RandomPerspective(p = 0.5),
+    transforms.RandomRotation(180)])
+    
+    train_set = MaskDataset(data_path, train_data, transform)
+    val_set = MaskDataset(data_path, val_data, transform)
+
+    train_loader = prepare_dataloader(train_set, rank, world_size, batch_size, seed)
+    val_loader = prepare_dataloader(val_set, rank, world_size, batch_size, seed)      
     
     # prepare model
     model = SegNet()  
@@ -153,21 +169,22 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
     model = torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters())
     scaler = torch.cuda.amp.GradScaler(enabled = True)
+    loss_func = torch.compile(nn.BCEWithLogitsLoss())
     
+    # Load weights 
     if pretrained is not None:
         working_directory = os.getcwd()
-        weights_dir = os.path.join(working_directory, 'train_checkpoints/', pretrained)
+        weights_dir = os.path.join(working_directory, traind_weights_dir, pretrained)
         state = torch.load(weights_dir, map_location = device)
         model.load_state_dict({''.join(['module.', key]): val for key, val in state['model_state_dict'].items()},strict = False)
         optimizer.load_state_dict(state['optimizer_state_dict'])
         start_epoch = state['epoch'] + 1
         epochs += start_epoch
     else:
-        weights_path = '/home/jupyter/work/resources/figureExtraction/weights/pretrained_encoder_weights_DEFAULT.pt'
-        state = torch.load(weights_path)
+        working_directory = os.getcwd()
+        weights_dir = os.path.join(working_directory, pretraind_weights_path)
+        state = torch.load(weights_dir)
         model.module.encoder.load_state_dict(state, strict = False)
-    
-    loss_func = torch.compile(nn.BCEWithLogitsLoss())
 
     if rank == 0:        
         #Create/check directories for log and model weights storage
