@@ -8,14 +8,11 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm
 from datetime import datetime
 
 from processingDataSet import MaskDataset
 from SegNetModel import SegNet
 
-
-import torch.utils.benchmark as benchmark
 
 @torch.compile()
 def IoU(pred: torch.tensor, real: torch.tensor,
@@ -41,7 +38,7 @@ def fit_eval_epoch(model: DDP,
     
     avg_loss, metric = 0, 0
     
-    for x_batch, y_batch in data: #tqdm(data):
+    for x_batch, y_batch in data:
         if prof: prof.step()
         x_batch = x_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
@@ -100,7 +97,7 @@ def prepare_dataloader(data: MaskDataset, rank: int,
                              shuffle = False, drop_last = True,
                              sampler = sampler, pin_memory = True,
                              num_workers = 4,
-                             prefetch_factor = 32,
+                             prefetch_factor = 16,
                              persistent_workers = True,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader
@@ -122,6 +119,15 @@ def prepare_strorage_folders() -> Tuple[str, str]:
 
     return log_dir, model_weights_dir
 
+def start_profiler() -> torch.profiler.profile:
+    """Create and return class object to collect performance metrics."""
+    prof = torch.profiler.profile(
+    schedule=torch.profiler.schedule(wait=4, warmup=1, active=3, repeat=2),
+    on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/SegNet'),
+    record_shapes=False,
+    with_stack=False)
+    prof.start()
+    return prof
 
 def worker(rank: int, world_size: int, train_data: MaskDataset,
            val_data: MaskDataset, batch_size: int,
@@ -144,8 +150,8 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
     model = DDP(model, device_ids = [rank],
                 output_device = rank,
                 find_unused_parameters = False)
-    model = torch.compile(model)#, mode = 'reduce-overhead')
-    optimizer = torch.optim.Adam(model.parameters())#, fused = True, foreach = False, capturable = True)
+    model = torch.compile(model)
+    optimizer = torch.optim.Adam(model.parameters())
     scaler = torch.cuda.amp.GradScaler(enabled = True)
     
     if pretrained is not None:
@@ -161,7 +167,7 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
         state = torch.load(weights_path)
         model.module.encoder.load_state_dict(state, strict = False)
     
-    loss_func = torch.compile(nn.BCEWithLogitsLoss())#, mode = 'reduce-overhead')
+    loss_func = torch.compile(nn.BCEWithLogitsLoss())
 
     if rank == 0:        
         #Create/check directories for log and model weights storage
@@ -170,12 +176,10 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
         # Logging entity
         #writer = SummaryWriter(LOG_DIR, flush_secs = 1)
     
-    prof = torch.profiler.profile(
-    schedule=torch.profiler.schedule(wait=4, warmup=1, active=3, repeat=2),
-    on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/SegNet'),
-    record_shapes=False,
-    with_stack=False)
-    prof.start()
+    prof = None
+    #Eable to collect model performance metrics
+    prof = start_profiler()
+    
 
     for epoch in range(start_epoch, epochs):
 
