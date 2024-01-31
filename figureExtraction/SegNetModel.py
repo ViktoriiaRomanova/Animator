@@ -32,7 +32,7 @@ class SegNet(nn.Module):
                 layers += [nn.MaxPool2d(2, stride = 2)]
             else:
                 l = cast(int, l)
-                layers += [nn.Conv2d(in_ch, l, 3, stride = 1, padding = 1),
+                layers += [nn.Conv2d(in_ch, l, 3, stride = 1, padding = 1, bias = False),
                            nn.BatchNorm2d(l), nn.ReLU(inplace = True)]
                 in_ch = l
         return nn.Sequential(*layers)
@@ -46,7 +46,7 @@ class SegNet(nn.Module):
                 layers += [nn.Upsample(scale_factor = 2, mode = 'bilinear')]
             else:
                 l = cast(int, l)
-                layers += [nn.Conv2d(in_ch, l, 3, stride = 1, padding = 1),
+                layers += [nn.Conv2d(in_ch, l, 3, stride = 1, padding = 1, bias = False),
                            nn.BatchNorm2d(l), nn.ReLU(inplace = True)]
                 in_ch = l
         layers.append(nn.Conv2d(in_ch, 1, 3, stride = 1, padding = 1))

@@ -12,7 +12,12 @@ from tqdm import tqdm
 from datetime import datetime
 
 from processingDataSet import MaskDataset
+from SegNetModel import SegNet
 
+
+import torch.utils.benchmark as benchmark
+
+@torch.compile()
 def IoU(pred: torch.tensor, real: torch.tensor,
         border: int = 0, smooth: float = 1e-8) -> float:
     """ Calculate Intersection over Union metric. """
@@ -24,45 +29,50 @@ def IoU(pred: torch.tensor, real: torch.tensor,
     iou = (intersection / (union_ + smooth)).mean().item()
     return iou
 
-
 def fit_eval_epoch(model: DDP,
                    loss_func: nn.Module, metric_func: Any, device: torch.device,
-                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None
-                   ) -> Tuple[torch.tensor, torch.tensor]:
+                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None,
+                   prof = None) -> Tuple[torch.tensor, torch.tensor]:
     """
         Make train/eval operations per epoch.
 
         Returns: loss and quality metric.
     """
+    
     avg_loss, metric = 0, 0
-    for x_batch, y_batch in tqdm(data):
-        x_batch = x_batch.to(device)
-        y_batch = y_batch.to(device)
+    
+    for x_batch, y_batch in data: #tqdm(data):
+        if prof: prof.step()
+        x_batch = x_batch.to(device, non_blocking=True)
+        y_batch = y_batch.to(device, non_blocking=True)
 
-        if optim is not None: optim.zero_grad()
+        if optim:
+            for param in model.parameters():
+                param.grad = None
 
         y_pred = model(x_batch)
         loss = loss_func(y_pred, y_batch)
-        if optim is not None:
+        if optim:
             loss.backward()
             optim.step()
 
         # Calculate average train loss and metric
-        avg_loss += (loss/len(data)).detach().cpu()
+        avg_loss += (loss/len(data)).detach()
 
         # !it is not final result, to get real metric need to divide it into num_batches
         metric += metric_func(y_pred, y_batch)
 
         del x_batch, y_batch, y_pred, loss
-
+    if prof: prof.stop()
     metric /= len(data)
     return avg_loss, metric
-
 
 def setup(rank: int, world_size: int) -> None:
     """Setup the process group."""
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12345'
+    
+    torch.set_num_threads(16)
 
     # initialize the process group
     # 'nccl' -- for GPU
@@ -82,7 +92,11 @@ def prepare_dataloader(data: MaskDataset, rank: int,
                                  seed = seed, drop_last = True)
     data_loader = DataLoader(data, batch_size = batch_size,
                              shuffle = False, drop_last = True,
-                             sampler = sampler, pin_memory = False)
+                             sampler = sampler, pin_memory = True,
+                             num_workers = 4,
+                             prefetch_factor = 32,
+                             persistent_workers = True,
+                             pin_memory_device = str(torch.device(rank)))
     return data_loader
 
 def prepare_strorage_folders() -> Tuple[str, str]:
@@ -103,7 +117,7 @@ def prepare_strorage_folders() -> Tuple[str, str]:
     return log_dir, model_weights_dir
 
 
-def worker(rank: int, model: nn.Module, world_size: int, train_data: MaskDataset,
+def worker(rank: int, world_size: int, train_data: MaskDataset,
            val_data: MaskDataset, batch_size: int,
            seed: int, epochs: int, pretrained: Optional[str] = None) -> None:
     """Describe training process which will be implemented for each worker."""
@@ -111,43 +125,50 @@ def worker(rank: int, model: nn.Module, world_size: int, train_data: MaskDataset
     setup(rank, world_size)
     
     device = torch.device(rank)
-    # Set device GPU to make transformations on GPU
-    train_data.device = device
-    val_data.device = device
 
     # prepare data
     train_loader = prepare_dataloader(train_data, rank, world_size, batch_size, seed)
-    val_loader = prepare_dataloader(val_data, rank, world_size, batch_size, seed)        
-
+    val_loader = prepare_dataloader(val_data, rank, world_size, batch_size, seed)      
+    
+    start_epoch = 0
+    
+    # prepare model
+    model = SegNet()  
     model.to(device)
-
     model = DDP(model, device_ids = [rank],
                 output_device = rank,
                 find_unused_parameters = False)
-
-    optimizer = torch.optim.Adam(model.parameters())
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                           #mode = 'max', factor = 0.5,
-                                                          #patience = 3, cooldown = 5)
-            
-    start_epoch = 0      
+    model = torch.compile(model)#, mode = 'reduce-overhead')
+    optimizer = torch.optim.Adam(model.parameters())#, fused = True, foreach = False, capturable = True)
+    
     if pretrained is not None:
         working_directory = os.getcwd()
         weights_dir = os.path.join(working_directory, 'train_checkpoints/', pretrained)
         state = torch.load(weights_dir, map_location = device)
-        model.load_state_dict({''.join(['module.', key]): val for key, val in state['model_state_dict'].items()})
+        model.load_state_dict({''.join(['module.', key]): val for key, val in state['model_state_dict'].items()},strict = False)
         optimizer.load_state_dict(state['optimizer_state_dict'])
         start_epoch = state['epoch'] + 1
         epochs += start_epoch
+    else:
+        weights_path = '/home/jupyter/work/resources/figureExtraction/weights/pretrained_encoder_weights_DEFAULT.pt'
+        state = torch.load(weights_path)
+        model.module.encoder.load_state_dict(state, strict = False)
     
-    loss_func = nn.BCEWithLogitsLoss()
+    loss_func = torch.compile(nn.BCEWithLogitsLoss())#, mode = 'reduce-overhead')
 
     if rank == 0:        
         #Create/check directories for log and model weights storage
         LOG_DIR, MODEL_WEIGHTS_DIR = prepare_strorage_folders()
         
         # Logging entity
-        writer = SummaryWriter(LOG_DIR, flush_secs = 1)
+        #writer = SummaryWriter(LOG_DIR, flush_secs = 1)
+    
+    prof = torch.profiler.profile(
+    schedule=torch.profiler.schedule(wait=4, warmup=1, active=3, repeat=2),
+    on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/SegNet'),
+    record_shapes=False,
+    with_stack=False)
+    prof.start()
 
     for epoch in range(start_epoch, epochs):
 
@@ -155,7 +176,7 @@ def worker(rank: int, model: nn.Module, world_size: int, train_data: MaskDataset
         val_loader.sampler.set_epoch(epoch - start_epoch)
 
         model.train()
-        train_loss, train_metric = fit_eval_epoch(model, loss_func, IoU, device, train_loader, optimizer)
+        train_loss, train_metric = fit_eval_epoch(model, loss_func, IoU, device, train_loader, optimizer, prof)
         model.eval()
         with torch.no_grad():
             val_loss, val_metric = fit_eval_epoch(model, loss_func, IoU, device, val_loader)
@@ -171,16 +192,17 @@ def worker(rank: int, model: nn.Module, world_size: int, train_data: MaskDataset
         if rank == 0:
             '''print('train_loss: ', metrics[0].item(), metrics[0].dtype, 'val_loss: ', metrics[2].item(), 'train_IoU: ',
                   metrics[1].item(), 'val_IoU: ', metrics[3].item(), 'epoch: ', epoch + 1, '/', epochs)'''
-            if (epoch + 1) % 1 == 0: 
+            if (epoch + 1) % 5 == 0: 
                 torch.save({'model_state_dict': model.module.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'epoch': epoch}, 
                            os.path.join(MODEL_WEIGHTS_DIR,
                                                                    datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '.pt'))
-            writer.add_scalars('Loss', {'train': metrics[0].item(), 'val': metrics[2].item()}, epoch)
-            writer.add_scalars('IoU', {'train': metrics[1].item(), 'val': metrics[3].item()}, epoch)
+            #writer.add_scalars('Loss', {'train': metrics[0].item(), 'val': metrics[2].item()}, epoch)
+            #writer.add_scalars('IoU', {'train': metrics[1].item(), 'val': metrics[3].item()}, epoch)
             if epoch == epochs - 1:
-                writer.close()
+             #   writer.close()
+                pass
             
 
     dist.destroy_process_group()
