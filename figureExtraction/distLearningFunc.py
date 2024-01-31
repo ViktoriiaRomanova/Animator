@@ -31,7 +31,7 @@ def IoU(pred: torch.tensor, real: torch.tensor,
 
 def fit_eval_epoch(model: DDP,
                    loss_func: nn.Module, metric_func: Any, device: torch.device,
-                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None,
+                   data: DataLoader, optim: Optional[torch.optim.Optimizer] = None, scaler = None,
                    prof = None) -> Tuple[torch.tensor, torch.tensor]:
     """
         Make train/eval operations per epoch.
@@ -45,16 +45,22 @@ def fit_eval_epoch(model: DDP,
         if prof: prof.step()
         x_batch = x_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
+        
+        with torch.autocast(device_type = 'cuda', dtype = torch.float16, enabled = True):
+            if optim:
+                for param in model.parameters():
+                    param.grad = None
 
+            y_pred = model(x_batch)
+            loss = loss_func(y_pred, y_batch)
         if optim:
-            for param in model.parameters():
-                param.grad = None
-
-        y_pred = model(x_batch)
-        loss = loss_func(y_pred, y_batch)
-        if optim:
-            loss.backward()
-            optim.step()
+            if scaler:
+                scaler.scale(loss).backward()
+                scaler.step(optim)
+                scaler.update()
+            else:
+                loss.backward()
+                optim.step()
 
         # Calculate average train loss and metric
         avg_loss += (loss/len(data)).detach()
@@ -140,6 +146,7 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
                 find_unused_parameters = False)
     model = torch.compile(model)#, mode = 'reduce-overhead')
     optimizer = torch.optim.Adam(model.parameters())#, fused = True, foreach = False, capturable = True)
+    scaler = torch.cuda.amp.GradScaler(enabled = True)
     
     if pretrained is not None:
         working_directory = os.getcwd()
@@ -176,7 +183,7 @@ def worker(rank: int, world_size: int, train_data: MaskDataset,
         val_loader.sampler.set_epoch(epoch - start_epoch)
 
         model.train()
-        train_loss, train_metric = fit_eval_epoch(model, loss_func, IoU, device, train_loader, optimizer, prof)
+        train_loss, train_metric = fit_eval_epoch(model, loss_func, IoU, device, train_loader, optimizer, scaler, prof)
         model.eval()
         with torch.no_grad():
             val_loss, val_metric = fit_eval_epoch(model, loss_func, IoU, device, val_loader)
