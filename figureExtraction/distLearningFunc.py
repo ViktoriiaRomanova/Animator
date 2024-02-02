@@ -13,6 +13,7 @@ from datetime import datetime
 
 from processingDataSet import MaskDataset
 from SegNetModel import SegNet
+from tqdm import tqdm
 
 
 @torch.compile()
@@ -40,7 +41,7 @@ def fit_eval_epoch(model: DDP,
     
     avg_loss, metric = 0, 0
     
-    for x_batch, y_batch in data:
+    for x_batch, y_batch in tqdm(data):
         if prof: prof.step()
         x_batch = x_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
@@ -98,8 +99,8 @@ def prepare_dataloader(data: MaskDataset, rank: int,
     data_loader = DataLoader(data, batch_size = batch_size,
                              shuffle = False, drop_last = True,
                              sampler = sampler, pin_memory = True,
-                             num_workers = 6,
-                             prefetch_factor = 36,
+                             num_workers = 8,
+                             prefetch_factor = 16,
                              persistent_workers = True,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader
@@ -180,10 +181,11 @@ def worker(rank: int, world_size: int, train_data: List[str],
         optimizer.load_state_dict(state['optimizer_state_dict'])
         start_epoch = state['epoch'] + 1
         epochs += start_epoch
+        scaler.load_state_dict(state['scaler'])
     else:
         working_directory = os.getcwd()
         weights_dir = os.path.join(working_directory, pretraind_weights_path)
-        state = torch.load(weights_dir)
+        state = torch.load(weights_dir, map_location = device)
         model.module.encoder.load_state_dict(state, strict = False)
 
     if rank == 0:        
@@ -191,12 +193,11 @@ def worker(rank: int, world_size: int, train_data: List[str],
         LOG_DIR, MODEL_WEIGHTS_DIR = prepare_strorage_folders()
         
         # Logging entity
-        #writer = SummaryWriter(LOG_DIR, flush_secs = 1)
+        writer = SummaryWriter(LOG_DIR, flush_secs = 1)
     
     prof = None
     #Eable to collect model performance metrics
-    prof = start_profiler()
-    
+    #prof = start_profiler()
 
     for epoch in range(start_epoch, epochs):
 
@@ -223,13 +224,14 @@ def worker(rank: int, world_size: int, train_data: List[str],
             if (epoch + 1) % 5 == 0: 
                 torch.save({'model_state_dict': model.module.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
-                            'epoch': epoch}, 
+                            'epoch': epoch,
+                            'scaler': scaler.state_dict()}, 
                            os.path.join(MODEL_WEIGHTS_DIR,
                                                                    datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '.pt'))
-            #writer.add_scalars('Loss', {'train': metrics[0].item(), 'val': metrics[2].item()}, epoch)
-            #writer.add_scalars('IoU', {'train': metrics[1].item(), 'val': metrics[3].item()}, epoch)
+            writer.add_scalars('Loss', {'train': metrics[0].item(), 'val': metrics[2].item()}, epoch)
+            writer.add_scalars('IoU', {'train': metrics[1].item(), 'val': metrics[3].item()}, epoch)
             if epoch == epochs - 1:
-             #   writer.close()
+                writer.close()
                 pass
             
 
