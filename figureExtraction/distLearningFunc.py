@@ -14,6 +14,7 @@ from datetime import datetime
 from processingDataSet import MaskDataset
 from SegNetModel import SegNet
 from tqdm import tqdm
+import pickle
 
 
 @torch.compile()
@@ -41,8 +42,10 @@ def fit_eval_epoch(model: DDP,
     
     avg_loss, metric = 0, 0
     
-    for x_batch, y_batch in tqdm(data):
-        if prof: prof.step()
+    for step, (x_batch, y_batch) in enumerate(tqdm(data)):
+        if prof: 
+            prof.step()
+        if step >= 4 + (1 + 3) * 2: break
         x_batch = x_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
         
@@ -78,7 +81,7 @@ def setup(rank: int, world_size: int) -> None:
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12345'
     
-    torch.set_num_threads(16)
+    #torch.set_num_threads(1)
 
     # initialize the process group
     # 'nccl' -- for GPU
@@ -101,6 +104,7 @@ def prepare_dataloader(data: MaskDataset, rank: int,
                              sampler = sampler, pin_memory = True,
                              num_workers = 8,
                              prefetch_factor = 16,
+                             multiprocessing_context="spawn",
                              persistent_workers = True,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader
@@ -155,8 +159,8 @@ def worker(rank: int, world_size: int, train_data: List[str],
     transforms.RandomPerspective(p = 0.5),
     transforms.RandomRotation(180)])
     
-    train_set = MaskDataset(data_path, train_data, transform)
-    val_set = MaskDataset(data_path, val_data, transform)
+    train_set = MaskDataset(data_path, train_data, transform, device)
+    val_set = MaskDataset(data_path, val_data, transform, device)
 
     train_loader = prepare_dataloader(train_set, rank, world_size, batch_size, seed)
     val_loader = prepare_dataloader(val_set, rank, world_size, batch_size, seed)      
@@ -168,9 +172,13 @@ def worker(rank: int, world_size: int, train_data: List[str],
                 output_device = rank,
                 find_unused_parameters = False)
     model = torch.compile(model)
+    
     optimizer = torch.optim.Adam(model.parameters())
     scaler = torch.cuda.amp.GradScaler(enabled = True)
     loss_func = torch.compile(nn.BCEWithLogitsLoss())
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           #mode = 'max', factor = 0.5,
+                                                           #patience = 3, cooldown = 1)
     
     # Load weights 
     if pretrained is not None:
@@ -187,6 +195,12 @@ def worker(rank: int, world_size: int, train_data: List[str],
         weights_dir = os.path.join(working_directory, pretraind_weights_path)
         state = torch.load(weights_dir, map_location = device)
         model.module.encoder.load_state_dict(state, strict = False)
+    
+    #model = torch.compile(model)
+    #loss_func = torch.compile(nn.BCEWithLogitsLoss())
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           #mode = 'max', factor = 0.5,
+                                                           #patience = 3, cooldown = 1)
 
     if rank == 0:        
         #Create/check directories for log and model weights storage
@@ -197,7 +211,7 @@ def worker(rank: int, world_size: int, train_data: List[str],
     
     prof = None
     #Eable to collect model performance metrics
-    #prof = start_profiler()
+    prof = start_profiler()
 
     for epoch in range(start_epoch, epochs):
 

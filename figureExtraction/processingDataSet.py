@@ -12,6 +12,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision import io
 from tqdm import tqdm
+import time
+import pandas as pd
 
 __all__ = [
             'PreprocessingData',
@@ -53,7 +55,7 @@ class MaskDataset(Dataset):
     """Prepare data for DataLoader."""
 
     def __init__(self, img_dir: str, data: List[str],
-                 transform: Union[nn.Module, transforms.Compose, None] = None) -> None:
+                 transform: Union[nn.Module, transforms.Compose, None] = None, device = None) -> None:
         """
             Args:
                 * dataset directory,
@@ -67,7 +69,7 @@ class MaskDataset(Dataset):
             transforms.Resize([224, 224], antialias=True)])
         # The same parameters that were used for obtaining VGG16 weights (are used for the initial encoder parameters)
         self.norm = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        self.device = torch.device('cpu')
+        self.device = device
 
     def __len__(self) -> int:
         """Return number of pictures in dataset."""
@@ -75,12 +77,18 @@ class MaskDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.tensor, torch.tensor]:
         """Return image/transformed image and it's mask by given index."""
+        worker_info = torch.utils.data.get_worker_info()
+        #with open('test_res.txt','a') as f:
+            #f.write(str(worker_info.id))
         img_path = os.path.join(self.img_dir, os.path.join('input', self.imgnames[idx]))
         mask_path = os.path.join(self.img_dir, 
                                  os.path.join('Output', self.imgnames[idx].split('.')[0] + '.png')) # masks stored in 'png' format and images in 'jpg' format
         
-        image = io.read_image(img_path).to(self.device)
-        mask = io.read_image(mask_path).to(self.device)
+        start = time.time()
+        image = io.read_image(img_path)
+        mask = io.read_image(mask_path)
+        frame = pd.DataFrame({'device:': [self.device], 'time:': [time.time() - start], 'id: ': [worker_info.id]})
+        frame.to_csv('open_time10.csv', mode = 'a')
         image = self.norm(self.to_resized_tensor(image).div(255))
         mask = self.to_resized_tensor(mask).div(255)
 
