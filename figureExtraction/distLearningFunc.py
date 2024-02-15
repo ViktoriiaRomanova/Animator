@@ -77,8 +77,6 @@ def setup(rank: int, world_size: int) -> None:
     """Setup the process group."""
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12345'
-    
-    torch.set_num_threads(16)
 
     # initialize the process group
     # 'nccl' -- for GPU
@@ -101,6 +99,7 @@ def prepare_dataloader(data: MaskDataset, rank: int,
                              sampler = sampler, pin_memory = True,
                              num_workers = 8,
                              prefetch_factor = 16,
+                             multiprocessing_context = 'spawn',
                              persistent_workers = True,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader

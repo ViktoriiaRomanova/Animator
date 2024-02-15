@@ -67,7 +67,6 @@ class MaskDataset(Dataset):
             transforms.Resize([224, 224], antialias=True)])
         # The same parameters that were used for obtaining VGG16 weights (are used for the initial encoder parameters)
         self.norm = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        self.device = torch.device('cpu')
 
     def __len__(self) -> int:
         """Return number of pictures in dataset."""
@@ -79,8 +78,8 @@ class MaskDataset(Dataset):
         mask_path = os.path.join(self.img_dir, 
                                  os.path.join('Output', self.imgnames[idx].split('.')[0] + '.png')) # masks stored in 'png' format and images in 'jpg' format
         
-        image = io.read_image(img_path).to(self.device)
-        mask = io.read_image(mask_path).to(self.device)
+        image = io.read_image(img_path)
+        mask = io.read_image(mask_path)
         image = self.norm(self.to_resized_tensor(image).div(255))
         mask = self.to_resized_tensor(mask).div(255)
 
