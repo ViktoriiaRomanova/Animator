@@ -166,7 +166,6 @@ def worker(rank: int, world_size: int, train_data: List[str],
     model = DDP(model, device_ids = [rank],
                 output_device = rank,
                 find_unused_parameters = False)
-    model = torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters())
     scaler = torch.cuda.amp.GradScaler(enabled = True)
     loss_func = torch.compile(nn.BCEWithLogitsLoss())
@@ -186,6 +185,8 @@ def worker(rank: int, world_size: int, train_data: List[str],
         weights_dir = os.path.join(working_directory, pretraind_weights_path)
         state = torch.load(weights_dir, map_location = device)
         model.module.encoder.load_state_dict(state, strict = False)
+    
+    model = torch.compile(model)
 
     if rank == 0:        
         #Create/check directories for log and model weights storage
