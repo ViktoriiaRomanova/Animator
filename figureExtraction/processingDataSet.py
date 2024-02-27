@@ -85,7 +85,7 @@ class MaskDataset(Dataset):
 
         if self.transforms:
             both = torch.cat((image, mask), dim = 0)
-            image = self.transforms(both)
+            both = self.transforms(both)
             image, mask = torch.tensor_split(both, [3], dim = 0)
         return image, mask
 
