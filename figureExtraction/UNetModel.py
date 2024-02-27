@@ -18,8 +18,9 @@ class UNet(nn.Module):
     def __init__(self, architecture: List[Union[str, int]] = ARC['B']) -> None:
         """Create model."""
         super().__init__()
-        self._encoder_ = self._make_encoder(architecture)
-        self._decoder_ = self._make_decoder(architecture[::-1])
+        
+        self.encoder = [nn.Sequential(*block) for block in self._make_encoder(architecture)]       
+        self.decoder = [nn.Sequential(*block) for block in self._make_decoder(architecture[::-1])]
         
         self.enc1 = nn.Sequential(*self._encoder_[0]) # 64
         self.enc2 = nn.Sequential(*self._encoder_[1]) # 128
@@ -81,6 +82,9 @@ class UNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Make forward path."""
+        enc, dec = [], []
+        for block in self.encoder:
+            enc.append(block())
         enc1 = self.enc1(x) # 64
         enc2 = self.enc2(enc1) # 128
         enc3 = self.enc3(enc2) # 256
