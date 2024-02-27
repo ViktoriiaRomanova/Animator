@@ -13,6 +13,7 @@ from datetime import datetime
 
 from processingDataSet import MaskDataset
 from SegNetModel import SegNet
+from UNetModel import UNet
 from tqdm import tqdm
 
 
@@ -108,8 +109,9 @@ def prepare_strorage_folders() -> Tuple[str, str]:
     """Create/check directories for log and model weights storage."""
     working_directory = os.getcwd()
 
-    log_dir = os.path.join(working_directory, 'runs/',
-                           datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
+    #log_dir = os.path.join(working_directory, 'runs/',
+                           #datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
+    log_dir = os.path.join(working_directory, 'runs/2024_02_27_12_38_52')
 
     model_weights_dir = os.path.join(working_directory, 'train_checkpoints/')
     
@@ -148,11 +150,10 @@ def worker(rank: int, world_size: int, train_data: List[str],
     
     
     # prepare data
-    transform = transforms.Compose([
-    transforms.RandomHorizontalFlip(p = 0.5),
-    transforms.RandomVerticalFlip(p = 0.5),
-    transforms.RandomPerspective(p = 0.5),
-    transforms.RandomRotation(180)])
+    transform = transforms.RandomChoice([
+    transforms.RandomHorizontalFlip(p = 0.1),
+    transforms.RandomVerticalFlip(p = 0.1),
+    transforms.RandomPerspective(p = 0.1)])
     
     train_set = MaskDataset(data_path, train_data, transform)
     val_set = MaskDataset(data_path, val_data, transform)
@@ -161,7 +162,7 @@ def worker(rank: int, world_size: int, train_data: List[str],
     val_loader = prepare_dataloader(val_set, rank, world_size, batch_size, seed)      
     
     # prepare model
-    model = SegNet()  
+    model = UNet()  
     model.to(device)
     model = DDP(model, device_ids = [rank],
                 output_device = rank,
@@ -170,8 +171,10 @@ def worker(rank: int, world_size: int, train_data: List[str],
     scaler = torch.cuda.amp.GradScaler(enabled = True)
     loss_func = torch.compile(nn.BCEWithLogitsLoss())
     
-    # Load weights 
-    if pretrained is not None:
+    # Load weights
+    if pretrained is None:
+        pass
+    elif pretrained != 'Transfer':
         working_directory = os.getcwd()
         weights_dir = os.path.join(working_directory, traind_weights_dir, pretrained)
         state = torch.load(weights_dir, map_location = device)
