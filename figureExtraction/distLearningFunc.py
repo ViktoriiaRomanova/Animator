@@ -109,9 +109,8 @@ def prepare_strorage_folders() -> Tuple[str, str]:
     """Create/check directories for log and model weights storage."""
     working_directory = os.getcwd()
 
-    #log_dir = os.path.join(working_directory, 'runs/',
-                           #datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
-    log_dir = os.path.join(working_directory, 'runs/2024_02_27_12_38_52')
+    log_dir = os.path.join(working_directory, 'runs/',
+                           datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
 
     model_weights_dir = os.path.join(working_directory, 'train_checkpoints/')
     
