@@ -1,6 +1,6 @@
 import os
 from typing import Any, List, Optional, Tuple
-
+from argparse import Namespace
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -133,19 +133,22 @@ def start_profiler() -> torch.profiler.profile:
     return prof
 
 
-def worker(rank: int, world_size: int, train_data: List[str],
+def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
            val_data: List[str], batch_size: int,
            seed: int, epochs: int, pretrained: Optional[str] = None) -> None:
-    """Describe training process which will be implemented for each worker."""
+    """
+        Describe training process which will be implemented for each worker.
+        args.dataset - path to dataset
+        args.prhome - path to project home directory
+    """
     # Setup process group, for each worker
     setup(rank, world_size)
     
     device = torch.device(rank)
     start_epoch = 0
-    
-    data_path = '/home/jupyter/mnt/datasets/Segmentation/Training' # Path to dataset
-    traind_weights_dir = 'train_checkpoints/' # Directory to store trained model weights
-    pretraind_weights_path = 'weights/pretrained_encoder_weights_DEFAULT.pt' # Diectory with loaded encoder weights from pytorch
+
+    traind_weights_dir = os.path.join(args.prhome, 'train_checkpoints/') # Directory to store trained model weights
+    pretraind_weights_path = os.path.join(args.prhome, 'weights/pretrained_encoder_weights_DEFAULT.pt') # Diectory with loaded encoder weights from pytorch
     
     
     # prepare data
@@ -154,8 +157,8 @@ def worker(rank: int, world_size: int, train_data: List[str],
     transforms.RandomVerticalFlip(p = 0.1),
     transforms.RandomPerspective(p = 0.1)])
     
-    train_set = MaskDataset(data_path, train_data, transform)
-    val_set = MaskDataset(data_path, val_data, transform)
+    train_set = MaskDataset(args.dataset, train_data, transform)
+    val_set = MaskDataset(args.dataset, val_data, transform)
 
     train_loader = prepare_dataloader(train_set, rank, world_size, batch_size, seed)
     val_loader = prepare_dataloader(val_set, rank, world_size, batch_size, seed)      
