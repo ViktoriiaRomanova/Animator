@@ -1,4 +1,5 @@
 import os
+from json import dumps as jdumps
 from typing import Any, List, Optional, Tuple
 from argparse import Namespace
 import torch
@@ -6,7 +7,6 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from datetime import datetime
@@ -105,22 +105,15 @@ def prepare_dataloader(data: MaskDataset, rank: int,
                              pin_memory_device = str(torch.device(rank)))
     return data_loader
 
-def prepare_strorage_folders() -> Tuple[str, str]:
-    """Create/check directories for log and model weights storage."""
+def prepare_strorage_folders() -> str:
+    """Create/check directories for model weights storage."""
     working_directory = os.getcwd()
-
-    log_dir = os.path.join(working_directory, 'runs/',
-                           datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
-
     model_weights_dir = os.path.join(working_directory, 'train_checkpoints/')
-    
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-        
+
     if not os.path.exists(model_weights_dir):
         os.makedirs(model_weights_dir)
 
-    return log_dir, model_weights_dir
+    return model_weights_dir
 
 def start_profiler() -> torch.profiler.profile:
     """Create and return class object to collect performance metrics."""
@@ -194,12 +187,9 @@ def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
     model = torch.compile(model)
 
     if rank == 0:        
-        #Create/check directories for log and model weights storage
-        LOG_DIR, MODEL_WEIGHTS_DIR = prepare_strorage_folders()
+        #Create/check directories model weights storage
+        MODEL_WEIGHTS_DIR = prepare_strorage_folders()
         
-        # Logging entity
-        writer = SummaryWriter(LOG_DIR, flush_secs = 1)
-    
     prof = None
     #Eable to collect model performance metrics
     #prof = start_profiler()
@@ -224,20 +214,18 @@ def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
         #scheduler.step(metrics[3])
 
         if rank == 0:
-            '''print('train_loss: ', metrics[0].item(), metrics[0].dtype, 'val_loss: ', metrics[2].item(), 'train_IoU: ',
-                  metrics[1].item(), 'val_IoU: ', metrics[3].item(), 'epoch: ', epoch + 1, '/', epochs)'''
+            # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
+            json_metrics = jdumps({'train_loss' : metrics[0].item(), 'val_loss': metrics[2].item(), 'train_IoU':
+                  metrics[1].item(), 'val_IoU': metrics[3].item(), 'epoch': epoch})
+            # Send metrics into stdout. This channel going to be transferred into initial machine. 
+            print(json_metrics)
+            
             if (epoch + 1) % 5 == 0: 
                 torch.save({'model_state_dict': model.module.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'epoch': epoch,
                             'scaler': scaler.state_dict()}, 
                            os.path.join(MODEL_WEIGHTS_DIR,
-                                                                   datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '.pt'))
-            writer.add_scalars('Loss', {'train': metrics[0].item(), 'val': metrics[2].item()}, epoch)
-            writer.add_scalars('IoU', {'train': metrics[1].item(), 'val': metrics[3].item()}, epoch)
-            if epoch == epochs - 1:
-                writer.close()
-                pass
-            
+                                                                   datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '.pt'))           
 
     dist.destroy_process_group()
