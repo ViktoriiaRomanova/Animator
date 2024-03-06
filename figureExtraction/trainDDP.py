@@ -12,8 +12,10 @@ from processingDataSet import PreprocessingData
 from distLearningFunc import worker
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', required=True)
-parser.add_argument('--prhome', required=True)
+parser.add_argument('--dataset', required=True) # path to dataset
+parser.add_argument('--prhome', required=True) # path to project home directory READONLY
+parser.add_argument('--omodel', required=True) # output checkpoints of model weights 
+parser.add_argument('--imodel') # input model weights 
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -21,10 +23,10 @@ if __name__ == '__main__':
     world_size = 2  # Number of GPU
     batch_size = 64
     seed = random_state
-    epochs = 3
+    epochs = 2
 
     prData = PreprocessingData(0.9)
-    train_data, val_data = prData.get_data(args.dataset, random_state, 0.2)
+    train_data, val_data = prData.get_data(args.dataset, random_state, 0.1)
 
     mp.spawn(worker, args = (args, world_size, train_data, val_data, batch_size, seed, epochs),
          nprocs = world_size)

@@ -1,12 +1,14 @@
 name: trainDDP_figureExtraction
 desc: Script for training of the figure extraction model (Distributed Data Parallel)
-cmd: python3 trainDDP.py --dataset ${Segmentation}/Training --prhome ${DS_PROJECT_HOME}
+cmd: python3 trainDDP.py --dataset ${Segmentation}/Training --prhome ${DS_PROJECT_HOME} --omodel ${OUTPUT_MODEL}
 env:
   docker: system-python-3-10
   python:
     type: manual
 datasets:
   - bt1nnnteecjjh2dpnm68: Segmentation
+outputs:
+  - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
 flags:
   - attach-project-disk 
 cloud-instance-type: g1.2

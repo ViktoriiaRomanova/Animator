@@ -2,6 +2,7 @@ import os
 from json import dumps as jdumps
 from typing import Any, List, Optional, Tuple
 from argparse import Namespace
+import shutil
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -108,7 +109,7 @@ def prepare_dataloader(data: MaskDataset, rank: int,
 def prepare_strorage_folders() -> str:
     """Create/check directories for model weights storage."""
     working_directory = os.getcwd()
-    model_weights_dir = os.path.join(working_directory, 'train_checkpoints/')
+    model_weights_dir = os.path.join(working_directory, 'train_checkpoints/', datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
 
     if not os.path.exists(model_weights_dir):
         os.makedirs(model_weights_dir)
@@ -125,21 +126,30 @@ def start_profiler() -> torch.profiler.profile:
     prof.start()
     return prof
 
+def make_archive(source: str, destination: str) -> None:
+    """Archives model checkpoints with name and directory set at initialization (config.yaml)."""
+    # Gets the name of a resulted file 
+    name, f_format = os.path.basename(destination).split('.')
+    # Gets current model weights folder name
+    archived_dir = os.path.basename(source)
+    # Gets the catalogue address where the folder is stored
+    root_dir = os.path.dirname(source)
+    # Creates archive at main directory: /job/
+    shutil.make_archive(name, f_format, root_dir, archived_dir)
+    # Moves archive to requested directory
+    shutil.move('{}.{}'.format(name, f_format), os.path.dirname(destination))
 
 def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
            val_data: List[str], batch_size: int,
            seed: int, epochs: int, pretrained: Optional[str] = None) -> None:
-    """
-        Describe training process which will be implemented for each worker.
-        args.dataset - path to dataset
-        args.prhome - path to project home directory
-    """
+    """Describe training process which will be implemented for each worker."""
     # Setup process group, for each worker
     setup(rank, world_size)
     
     device = torch.device(rank)
     start_epoch = 0
 
+    # !Need to fix pre-trained model loading!
     traind_weights_dir = os.path.join(args.prhome, 'train_checkpoints/') # Directory to store trained model weights
     pretraind_weights_path = os.path.join(args.prhome, 'weights/pretrained_encoder_weights_DEFAULT.pt') # Diectory with loaded encoder weights from pytorch
     
@@ -189,7 +199,8 @@ def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
     if rank == 0:        
         #Create/check directories model weights storage
         MODEL_WEIGHTS_DIR = prepare_strorage_folders()
-        
+
+    # Profiler serviceability wasn't checked after moving into DataSphere Jobs platform!     
     prof = None
     #Eable to collect model performance metrics
     #prof = start_profiler()
@@ -220,12 +231,12 @@ def worker(rank: int, args: Namespace, world_size: int, train_data: List[str],
             # Send metrics into stdout. This channel going to be transferred into initial machine. 
             print(json_metrics)
             
-            if (epoch + 1) % 5 == 0: 
+            if (epoch + 1) % 1 == 0: 
                 torch.save({'model_state_dict': model.module.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'epoch': epoch,
                             'scaler': scaler.state_dict()}, 
-                           os.path.join(MODEL_WEIGHTS_DIR,
-                                                                   datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '.pt'))           
-
+                           os.path.join(MODEL_WEIGHTS_DIR, str(epoch) + '.pt'))
+    if rank == 0:           
+        make_archive(MODEL_WEIGHTS_DIR, args.omodel)
     dist.destroy_process_group()

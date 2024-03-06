@@ -10,7 +10,7 @@
     Args:
         --path - required path to stdout.txt file
         --sleep - optional argument sets a time for new data arrival check, deafult 30 sec
-        --wait - optional argument sets a time to wait(min) after last update, deafult 20 min
+        --wait - optional argument sets a time to wait before closing(min) after last update, deafult 20 min
 '''
 import argparse
 import os
@@ -23,7 +23,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', required = True, help = 'required path to stdout.txt file')
 parser.add_argument('--sleep', type = int, default = 30, help = 'optional argument sets a time for new data arrival check')
-parser.add_argument('--wait', type = int, default = 20, help = 'optional argument sets a time to wait(min) after last update')
+parser.add_argument('--wait', type = int, default = 20, help = 'optional argument sets a time to wait before closing(min) after last update')
 
 def fill_writer():
     # Pars script args
