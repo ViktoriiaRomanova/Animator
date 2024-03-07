@@ -16,12 +16,13 @@ ARC: Dict[str, List[Union[str, int]]] = {
 class SegNet(nn.Module):
     """Make SegNet architecture."""
 
-    def __init__(self, architecture: List[Union[str, int]] = ARC['C']) -> None:
+    def __init__(self, arc: str = 'C') -> None:
         """Create model."""
         super().__init__()
-        self.encoder = self._make_encoder(architecture)
-        self.decoder = self._make_decoder(architecture[::-1])
-        self.bottleneck = self._make_bottleneck(architecture[-2])
+        self.architecture = ARC[arc]
+        self.encoder = self._make_encoder(self.architecture)
+        self.decoder = self._make_decoder(self.architecture[::-1])
+        self.bottleneck = self._make_bottleneck(self.architecture[-2])
         
     def _make_encoder(self, arc: List[Union[str, int]]) -> nn.Sequential:
         """Construct encoder layers."""
