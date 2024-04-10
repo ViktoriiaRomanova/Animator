@@ -24,7 +24,7 @@ class Generator(nn.Module):
         in_ch, out_ch = 3, 64
         layers += [
             nn.Conv2d(in_ch, out_ch, kernel_size = 7, stride = 1, padding = 3, padding_mode = 'reflect', bias = True),
-            nn.InstanceNorm2d(64),
+            nn.InstanceNorm2d(out_ch),
             nn.ReLU(True)]
         
         in_ch, out_ch = out_ch, 2 * out_ch
@@ -57,5 +57,29 @@ class Generator(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
+
+class Discriminator(nn.Module):
+    def __init__(self,) -> None:
+        super().__init__()
+        layers: list[nn.Module] = []
+        in_ch, out_ch = 3, 64
+        layers += [
+            nn.Conv2d(in_ch, out_ch, kernel_size = 4, stride = 2, padding = 1, bias = True),
+            nn.LeakyReLU(0.2, True)]
+
+        for _ in range(2):
+            in_ch, out_ch = out_ch, 2 * out_ch
+            layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 4, stride = 2, padding = 1, bias = True),
+                       nn.InstanceNorm2d(out_ch),
+                       nn.LeakyReLU(0.2, True)]
         
-        
+        in_ch, out_ch = out_ch, 2 * out_ch
+        layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 4, stride = 1, padding = 1, bias = True),
+                   nn.InstanceNorm2d(out_ch),
+                   nn.LeakyReLU(0.2, True)]
+        in_ch, out_ch = out_ch, 1
+        layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 4, stride = 1, padding = 1, bias = True)]
+        self.model = nn.Sequential(*layers)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)        
