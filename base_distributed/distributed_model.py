@@ -17,7 +17,8 @@ class BaseDist(ABC):
 
             !!!ADD FINAL LIST OF FUNCTIONS!!!
     """
-    def __init__(self, rank: int, world_size: int, seed: int = 42) -> None:
+    def __init__(self, rank: int, world_size: int,
+                 seed: int = 42, scaler_enabled: bool = True) -> None:
         """Initialize the BaseDist class.
 
         Parameters:
@@ -32,17 +33,18 @@ class BaseDist(ABC):
         !!!ADD DESCRIPTION HERE!!!
  
         """        
-        self.rank = rank
         self.world_size = world_size
         self.random_seed = seed
         # Set GPU number for this process
-        self.device = torch.device(self.rank)
+        self.device = torch.device(rank)
 
         # Setup the process group
         self.__setup()
 
         #Create/check directories for model weights storage
         self.model_weights_dir = self.__prepare_strorage_folders()
+
+        self.scaler = torch.cuda.amp.GradScaler(enabled = scaler_enabled)
                 
 
     def __setup(self,) -> None:
@@ -52,7 +54,7 @@ class BaseDist(ABC):
 
         # initialize the process group
         # 'nccl' -- for GPU
-        dist.init_process_group('nccl', rank = self.rank, world_size = self.world_size)
+        dist.init_process_group('nccl', rank = self.device, world_size = self.world_size)
     
     def __prepare_strorage_folders(self,) -> str:
         """Create/check directories for model weights storage."""
@@ -76,7 +78,7 @@ class BaseDist(ABC):
         module.apply(init_func)
     
     def _ddp_wrapper(self, model: nn.Module) -> nn.Module:
-        return DDP(model, device_ids = self.rank, output_device = self.rank,
+        return DDP(model, device_ids = self.device, output_device = self.device,
                    find_unused_parameters = False)
 
     def make_archive(self, source: str, destination: str) -> None:
