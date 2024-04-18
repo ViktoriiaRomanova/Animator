@@ -7,8 +7,8 @@ class AdversarialLoss(nn.Module):
     def __init__(self, ltype: str = 'MSE', real_val: float = 1.0, fake_val: float = 0.0) -> None:
         super().__init__()
 
-        self.register_buffer('real', torch.tensor(real_val))
-        self.register_buffer('fake', torch.tensor(fake_val))
+        self.register_buffer('real', torch.tensor(real_val), persistent = False)
+        self.register_buffer('fake', torch.tensor(fake_val), persistent = False)
 
         if ltype == 'BCE':
             self.loss = nn.BCEWithLogitsLoss()
@@ -28,8 +28,10 @@ class AdversarialLoss(nn.Module):
     
 
 class CycleLoss(nn.Module):
-    def __init__(self, ltype: str = 'L1') -> None:
+    def __init__(self, ltype: str = 'L1', lambda_A: float = 10, lambda_B: float = 10) -> None:
         super().__init__()
+        self.lambda_A = lambda_A
+        self.lambda_B = lambda_B
         if ltype == 'L1':
             self.loss = nn.L1Loss()
         else:
@@ -37,11 +39,13 @@ class CycleLoss(nn.Module):
     
     def __call__(self, obtained_X: torch.Tensor, obtained_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
-        return self.loss(obtained_X, real_X) + self.loss(obtained_Y, real_Y)
+        return self.loss(obtained_X, real_X) * self.lambda_A + \
+             + self.loss(obtained_Y, real_Y) * self.lambda_B
 
 class IdentityLoss(nn.Module):
-    def __init__(self, ltype: str) -> None:
+    def __init__(self, ltype: str, lambda_idn: float = 0.5) -> None:
         super().__init__()
+        self.lambda_idn = lambda_idn
         if ltype == 'L1':
             self.loss = nn.L1Loss()
         else:
@@ -49,4 +53,4 @@ class IdentityLoss(nn.Module):
 
     def __call__(self, obtained_from_X: torch.Tensor, obtained_from_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
-        return self.loss(obtained_from_X, real_X) + self.loss(obtained_from_Y, real_Y)
+        return (self.loss(obtained_from_X, real_X) + self.loss(obtained_from_Y, real_Y)) * self.lambda_idn

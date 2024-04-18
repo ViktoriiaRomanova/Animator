@@ -39,22 +39,23 @@ class BaseDist(ABC):
         self.device = torch.device(rank)
 
         # Setup the process group
-        self.__setup()
+        self.__setup(rank)
 
         #Create/check directories for model weights storage
-        self.model_weights_dir = self.__prepare_strorage_folders()
+        if rank == 0:
+            self.model_weights_dir = self.__prepare_strorage_folders()
 
         self.scaler = torch.cuda.amp.GradScaler(enabled = scaler_enabled)
                 
 
-    def __setup(self,) -> None:
+    def __setup(self, rank: int) -> None:
         """Setup the process group."""
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12345'
 
         # initialize the process group
         # 'nccl' -- for GPU
-        dist.init_process_group('nccl', rank = self.device, world_size = self.world_size)
+        dist.init_process_group('nccl', rank = rank, world_size = self.world_size)
     
     def __prepare_strorage_folders(self,) -> str:
         """Create/check directories for model weights storage."""
@@ -92,14 +93,11 @@ class BaseDist(ABC):
         archived_dir = os.path.basename(source)
         # Gets the catalogue address where the folder is stored
         root_dir = os.path.dirname(source)
-        # Creates archive at main directory: /job/from torch.nn.parallel import DistributedDataParallel as DDPch.tensor]:
-        """
-            Make train/eval operations per epoch.
-
-            Returns: loss and quality metric.
-        """
-        pass
-    
+        # Creates archive at main directory: /job/
+        shutil.make_archive(name, f_format, root_dir, archived_dir)
+        # Moves archive to requested directory
+        shutil.move('{}.{}'.format(name, f_format), os.path.dirname(destination))
+       
     @abstractmethod
     def prepare_dataloader(self,) -> DataLoader:
         """

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 from base_distributed.distributed_model import BaseDist
 from argparse import Namespace
 
@@ -50,11 +51,35 @@ class DistLearning(BaseDist):
         self.cycle_loss = torch.compile(CycleLoss('L1'))
         self.idn_loss = torch.compile(IdentityLoss('L1'))
 
+        self.scaler = torch.cuda.amp.GradScaler(enabled = True)
+
         for model in self.models:
             model.compile()
+
+    def prepare_dataloader(self) -> DataLoader:
+        pass
     
-    #def forward():
+    @torch.autocast(device_type = 'cuda', dtype = torch.float16)
+    def forward(self, X: torch.Tensor, Y: torch.Tensor, adv_alpha: float = 0.5) -> torch.Tensor:
+        fakeY = self.genA(X)
+        cycle_fakeX = self.genB(fakeY)
+        fakeX = self.genB(Y)
+        cycle_fakeY = self.genA(fakeX)
+
+        #self.set_requires_grad(self.discs, False)
+
+        loss = adv_alpha * (self.adv_loss(self.discA(X), True) + self.adv_loss(self.discA(fakeX), True)) + \
+            + self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
+            + self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+        
+        return loss
+    
+    def backward_gen(self, loss: torch.Tensor):
+        self.gens.zero_grad(True)
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.opim_gen)
+        self.scaler.update()
 
     
-    #def initiate():
+    #def execute():
         
