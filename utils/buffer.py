@@ -23,6 +23,8 @@ class ImageBuffer():
         By 50% chance, the buffer will return last imput image/images.
         By 50% chance, the buffer will return image/images previously stored in the buffer
         '''
+        if self.buffer is None:
+            raise RuntimeError('method "add" should be called before "get"')
         prob = uniform(0, 1)
         img = self.buffer
         if prob > 0.5 and len(self.storage) > 0:                 
