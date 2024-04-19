@@ -20,7 +20,7 @@ class DistLearning(BaseDist):
                  init_args: Namespace, train_data: list[str],
                  val_data: list[str] | None, batch_size: int,
                  epochs: int) -> None:
-        super().__init__(rank, world_size, seed, True)
+        super().__init__(rank, world_size, seed)
 
         self.init_args = init_args
         train_set = GetDataset(init_args.dataset, train_data)
@@ -40,33 +40,35 @@ class DistLearning(BaseDist):
 
         self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
+        self.scaler = torch.cuda.amp.GradScaler(enabled = True)
+
         self.fake_Y_buffer = ImageBuffer(50)
         self.fake_X_buffer = ImageBuffer(50)
+
+        self.optim_gen = torch.optim.Adam(nn.ParameterList(model.parameters() for model in self.gens),
+                                        lr = 0.0002, betas = (0.5, 0.999))        
+        self.optim_discA = torch.optim.Adam(self.discA.parameters(),
+                                          lr = 0.0002, betas = (0.5, 0.999))        
+        self.optim_discB = torch.optim.Adam(self.discB.parameters(),
+                                          lr = 0.0002, betas = (0.5, 0.999))
+        
+        self.optims = nn.ModuleList[self.optim_gen, self.optim_discA, self.optim_discB]
 
         if init_args.imodel is None:
             # Initialze model weights with Gaussian distribution N(0, 0.2)
             self.start_epoch = 0
             self._init_weights(self.models, mean = 0.0, std = 0.2)
         else:
-            self.start_epoch = self.load_model(self.models, init_args.imodel, self.device)
+            to_populate = {'models': self.models, 'optims': self.optims,
+                           'scaler': self.scaler}
+            self.start_epoch = self.load_model(to_populate, init_args.imodel, self.device)
         
         self.epochs = self.start_epoch + epochs
         self.batch_size = batch_size
-        
-        self.opim_gen = torch.optim.Adam(nn.ParameterList(model.parameters() for model in self.gens),
-                                        lr = 0.0002, betas = (0.5, 0.999))
-        
-        self.opim_discA = torch.optim.Adam(self.discA.parameters(),
-                                          lr = 0.0002, betas = (0.5, 0.999))
-        
-        self.opim_discB = torch.optim.Adam(self.discB.parameters(),
-                                          lr = 0.0002, betas = (0.5, 0.999))
 
         self.adv_loss = torch.colmpile(AdversarialLoss(ltype = 'MSE'))
         self.cycle_loss = torch.compile(CycleLoss('L1'))
         self.idn_loss = torch.compile(IdentityLoss('L1'))
-
-        self.scaler = torch.cuda.amp.GradScaler(enabled = True)
 
         for model in self.models:
             model.compile()
@@ -133,7 +135,7 @@ class DistLearning(BaseDist):
     def backward_gen(self, loss: torch.Tensor) -> None:
         self.gens.zero_grad(True)
         self.scaler.scale(loss).backward()
-        self.scaler.step(self.opim_gen)
+        self.scaler.step(self.optim_gen)
     
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
 
@@ -142,8 +144,8 @@ class DistLearning(BaseDist):
         self.scaler.scale(lossA).backward()
         self.scaler.scale(lossB).backward()
 
-        self.scaler.step(self.opim_discA)
-        self.scaler.step(self.opim_discB)
+        self.scaler.step(self.opitm_discA)
+        self.scaler.step(self.opitm_discB)
 
         # Update scaler after last "step"
         self.scaler.update()
@@ -187,11 +189,9 @@ class DistLearning(BaseDist):
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
             
-                if (epoch + 1) % 20 == 0: 
-                    torch.save({'genA_state_dict': self.genA.module.state_dict(),
-                                'genB_state_dict': self.genB.module.state_dict(),
-                                'discA_state_dict': self.discA.module.state_dict(),
-                                'discB_state_dict': self.discB.module.state_dict(),
+                if (epoch + 1) % 20 == 0:                   
+                    torch.save({'models': self.models.state_dict(),
+                                'optims': self.optims.state_dict(),
                                 'epoch': epoch,
                                 'scaler': self.scaler.state_dict()}, 
                             os.path.join(self.model_weights_dir, str(epoch) + '.pt'))

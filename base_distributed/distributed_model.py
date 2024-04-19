@@ -18,7 +18,7 @@ class BaseDist(ABC):
             !!!ADD FINAL LIST OF FUNCTIONS!!!
     """
     def __init__(self, rank: int, world_size: int,
-                 seed: int = 42, scaler_enabled: bool = True) -> None:
+                 seed: int = 42) -> None:
         """Initialize the BaseDist class.
 
         Parameters:
@@ -45,7 +45,6 @@ class BaseDist(ABC):
         if rank == 0:
             self.model_weights_dir = self.__prepare_strorage_folders()
 
-        self.scaler = torch.cuda.amp.GradScaler(enabled = scaler_enabled)
                 
 
     def __setup(self, rank: int) -> None:
@@ -113,16 +112,14 @@ class BaseDist(ABC):
             for param in model.parameters():
                 param.requires_grad = state
 
-    def load_model(self, model: nn.Module, path: str, device: torch.device) -> int:
+    def load_model(self, to_populate: dict[str, nn.Module | torch.cuda.amp.GradScaler],
+                   path: str, device: torch.device) -> None:
         working_directory = os.getcwd()
         weights_dir = os.path.join(working_directory, path)
-        """TO FIX!!!"""
-        '''
         state = torch.load(weights_dir, map_location = device)
-        model.load_state_dict({''.join(['module.', key]): val for key, val in state['model_state_dict'].items()},strict = False)
-        optimizer.load_state_dict(state['optimizer_state_dict'])
-        start_epoch = state['epoch'] + 1
-        epochs += start_epoch
-        scaler.load_state_dict(state['scaler']) '''
-        return 0
+        for key, val in to_populate.items():
+            val.load_state_dict(state[key])
+        return state['epoch'] + 1
+
+
         
