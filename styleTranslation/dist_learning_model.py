@@ -9,10 +9,11 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from base_distributed.distributed_model import BaseDist
-from cycle_gan_model import Generator, Discriminator
-from losses import AdversarialLoss, CycleLoss, IdentityLoss
+from base_distributed._distributed_model import BaseDist
+from .cycle_gan_model import Generator, Discriminator
+from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from utils.buffer import ImageBuffer
+from .preprocessing_data import GetDataset
 
 
 class DistLearning(BaseDist):
