@@ -112,14 +112,13 @@ class BaseDist(ABC):
             for param in model.parameters():
                 param.requires_grad = state
 
-    def load_model(self, to_populate: dict[str, nn.Module | torch.cuda.amp.GradScaler],
-                   path: str, device: torch.device) -> None:
-        working_directory = os.getcwd()
-        weights_dir = os.path.join(working_directory, path)
-        state = torch.load(weights_dir, map_location = device)
-        for key, val in to_populate.items():
-            val.load_state_dict(state[key])
-        return state['epoch'] + 1
+    @abstractmethod
+    def load_model(self, path: str, device: torch.device) -> int:
+        """
+            Method to load model, optimizer, etc. saved state.
+        """
+        pass
+        
 
 
         

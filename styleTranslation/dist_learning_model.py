@@ -59,9 +59,7 @@ class DistLearning(BaseDist):
             self.start_epoch = 0
             self._init_weights(self.models, mean = 0.0, std = 0.2)
         else:
-            to_populate = {'models': self.models, 'optims': self.optims,
-                           'scaler': self.scaler}
-            self.start_epoch = self.load_model(to_populate, init_args.imodel, self.device)
+            self.start_epoch = self.load_model(init_args.imodel, self.device)
         
         self.epochs = self.start_epoch + epochs
         self.batch_size = batch_size
@@ -72,6 +70,15 @@ class DistLearning(BaseDist):
 
         for model in self.models:
             model.compile()
+
+    def load_model(self, path: str, device: torch.device) -> int:
+        working_directory = os.getcwd()
+        weights_dir = os.path.join(working_directory, path)
+        state = torch.load(weights_dir, map_location = device)
+        self.models.load_state_dict(state['models'])
+        self.optims.load_state_dict(state['optims'])
+        self.scaler.load_state_dict(state['staler'])
+        return state['epoch'] + 1
 
     def prepare_dataloader(self, data: GetDataset, rank: int,
                     world_size: int, batch_size: int,
