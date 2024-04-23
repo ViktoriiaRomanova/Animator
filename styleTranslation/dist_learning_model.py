@@ -2,6 +2,7 @@ from argparse import Namespace
 from tqdm import tqdm
 import os
 from json import dumps as jdumps
+from collections.abc import Mapping
 
 import torch
 from torch import nn
@@ -17,15 +18,20 @@ from .preprocessing_data import GetDataset
 
 
 class DistLearning(BaseDist):
-    def __init__(self, rank: int, world_size: int, seed: int,
-                 init_args: Namespace, train_data: list[str],
-                 val_data: list[str] | None, batch_size: int,
-                 epochs: int) -> None:
-        super().__init__(rank, world_size, seed)
+    def __init__(self, rank: int, init_args: Namespace, 
+                 params: dict[Mapping | int | str],
+                 train_data: list[str], val_data: list[str] | None,
+                ) -> None:
+        super().__init__(rank, params)
 
         self.init_args = init_args
+        self.batch_size = params['batch_size']
+        self.epochs = params['epochs']
+
         train_set = GetDataset(init_args.dataset, train_data)
-        self.train_loader = self.prepare_dataloader(train_set, rank, world_size, batch_size, seed)
+        self.train_loader = self.prepare_dataloader(train_set, rank,
+                                                    self.world_size, self.batch_size, 
+                                                    self.random_seed)
 
         # Create forward(A) and reverse(B) models
         self.genA = self._ddp_wrapper(Generator().to(self.device))
@@ -43,10 +49,10 @@ class DistLearning(BaseDist):
 
         self.scaler = torch.cuda.amp.GradScaler(enabled = True)
 
-        self.fake_Y_buffer = ImageBuffer(50)
-        self.fake_X_buffer = ImageBuffer(50)
+        self.fake_Y_buffer = ImageBuffer(params['buffer_size'])
+        self.fake_X_buffer = ImageBuffer(params['buffer_size'])
 
-        self.optim_gen = torch.optim.Adam(nn.ParameterList(model.parameters() for model in self.gens),
+        self.optim_gen = torch.optim.Adam(self.gens.parameters(),
                                         lr = 0.0002, betas = (0.5, 0.999))        
         self.optim_discA = torch.optim.Adam(self.discA.parameters(),
                                           lr = 0.0002, betas = (0.5, 0.999))        
@@ -63,7 +69,6 @@ class DistLearning(BaseDist):
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         
         self.epochs = self.start_epoch + epochs
-        self.batch_size = batch_size
 
         self.adv_loss = torch.colmpile(AdversarialLoss(ltype = 'MSE'))
         self.cycle_loss = torch.compile(CycleLoss('L1'))
