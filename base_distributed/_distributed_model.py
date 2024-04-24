@@ -9,6 +9,8 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from utils.parameter_storages import DistParams
+
 
 class BaseDist(ABC):
     """
@@ -17,8 +19,7 @@ class BaseDist(ABC):
 
             !!!ADD FINAL LIST OF FUNCTIONS!!!
     """
-    def __init__(self, rank: int, world_size: int,
-                 seed: int = 42) -> None:
+    def __init__(self, rank: int, params: DistParams, random_state: int) -> None:
         """Initialize the BaseDist class.
 
         Parameters:
@@ -33,13 +34,13 @@ class BaseDist(ABC):
         !!!ADD DESCRIPTION HERE!!!
  
         """        
-        self.world_size = world_size
-        self.random_seed = seed
+        self.world_size = params.world_size
+        self.random_seed = random_state
         # Set GPU number for this process
         self.device = torch.device(rank)
 
         # Setup the process group
-        self.__setup(rank)
+        self.__setup(rank, params)
 
         #Create/check directories for model weights storage
         if rank == 0:
@@ -47,14 +48,15 @@ class BaseDist(ABC):
 
                 
 
-    def __setup(self, rank: int) -> None:
+    def __setup(self, rank: int, params: DistParams) -> None:
         """Setup the process group."""
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12345'
+        os.environ['MASTER_ADDR'] = params.address
+        os.environ['MASTER_PORT'] = params.port
 
         # initialize the process group
         # 'nccl' -- for GPU
-        dist.init_process_group('nccl', rank = rank, world_size = self.world_size)
+        dist.init_process_group(params.backend,
+                                rank = rank, world_size = self.world_size)
     
     def __prepare_strorage_folders(self,) -> str:
         """Create/check directories for model weights storage."""

@@ -1,5 +1,4 @@
 from dataclasses import dataclass, is_dataclass
-import warnings
 
 def nested_dataclass(*args, **kwargs):
     def wrapper(in_cls):
@@ -10,8 +9,6 @@ def nested_dataclass(*args, **kwargs):
                 field_type = in_cls.__annotations__.get(name, None)
                 if is_dataclass(field_type) and isinstance(val, dict):
                     kwargs[name] = field_type(**val)
-                elif field_type is None:
-                    warnings.warn('Hyperparameters settings contain unexpected parameter {}'.format(name))
             original_init(self, *args, **kwargs)
         in_cls.__init__ = __init__
         return in_cls

@@ -2,7 +2,6 @@ from argparse import Namespace
 from tqdm import tqdm
 import os
 from json import dumps as jdumps
-from collections.abc import Mapping
 
 import torch
 from torch import nn
@@ -15,18 +14,18 @@ from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from utils.buffer import ImageBuffer
 from .preprocessing_data import GetDataset
-
+from utils.parameter_storages import TrainingParams
 
 class DistLearning(BaseDist):
     def __init__(self, rank: int, init_args: Namespace, 
-                 params: dict[Mapping | int | str],
+                 params: TrainingParams,
                  train_data: list[str], val_data: list[str] | None,
                 ) -> None:
-        super().__init__(rank, params)
+        super().__init__(rank, params.distributed, params.main.random_state)
 
         self.init_args = init_args
-        self.batch_size = params['batch_size']
-        self.epochs = params['epochs']
+        self.batch_size = params.main.batch_size
+        self.epochs = params.main.epochs
 
         train_set = GetDataset(init_args.dataset, train_data)
         self.train_loader = self.prepare_dataloader(train_set, rank,
@@ -49,26 +48,30 @@ class DistLearning(BaseDist):
 
         self.scaler = torch.cuda.amp.GradScaler(enabled = True)
 
-        self.fake_Y_buffer = ImageBuffer(params['buffer_size'])
-        self.fake_X_buffer = ImageBuffer(params['buffer_size'])
+        self.fake_Y_buffer = ImageBuffer(params.main.buffer_size)
+        self.fake_X_buffer = ImageBuffer(params.main.buffer_size)
 
         self.optim_gen = torch.optim.Adam(self.gens.parameters(),
-                                        lr = 0.0002, betas = (0.5, 0.999))        
+                                          lr = params.optimizers.gen.lr,
+                                          betas = params.optimizers.gen.betas)        
         self.optim_discA = torch.optim.Adam(self.discA.parameters(),
-                                          lr = 0.0002, betas = (0.5, 0.999))        
+                                            lr = params.optimizers.discA.lr,
+                                            betas = params.optimizers.discA.betas)        
         self.optim_discB = torch.optim.Adam(self.discB.parameters(),
-                                          lr = 0.0002, betas = (0.5, 0.999))
+                                            lr = params.optimizers.discB.lr,
+                                            betas = params.optimizers.discB.betas)
         
         self.optims = nn.ModuleList[self.optim_gen, self.optim_discA, self.optim_discB]
 
         if init_args.imodel is None:
-            # Initialze model weights with Gaussian distribution N(0, 0.2)
+            # Initialze model weights with Gaussian distribution
             self.start_epoch = 0
-            self._init_weights(self.models, mean = 0.0, std = 0.2)
+            self._init_weights(self.models, mean = params.models.mean,
+                               std = params.models.std)
         else:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         
-        self.epochs = self.start_epoch + epochs
+        self.epochs = self.start_epoch
 
         self.adv_loss = torch.colmpile(AdversarialLoss(ltype = 'MSE'))
         self.cycle_loss = torch.compile(CycleLoss('L1'))
