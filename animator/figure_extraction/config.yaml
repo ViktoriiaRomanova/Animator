@@ -1,5 +1,5 @@
 name: trainDDP_figureExtraction
-desc: Script for training of the figure extraction model (Distributed Data Parallel)
+desc: Script for training the figure extraction model (Distributed Data Parallel)
 cmd: python3 trainDDP.py --dataset ${Segmentation}/Training --prhome ${DS_PROJECT_HOME} --omodel ${OUTPUT_MODEL}
 env:
   docker: system-python-3-10
