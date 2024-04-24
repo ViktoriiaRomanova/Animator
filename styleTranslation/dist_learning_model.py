@@ -71,7 +71,7 @@ class DistLearning(BaseDist):
         else:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         
-        self.epochs = self.start_epoch
+        self.epochs += self.start_epoch
 
         self.adv_loss = torch.colmpile(AdversarialLoss(ltype = 'MSE'))
         self.cycle_loss = torch.compile(CycleLoss('L1'))
