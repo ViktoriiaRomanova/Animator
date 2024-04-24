@@ -18,16 +18,16 @@ distributed:
 optimizers:
   gen:
     lr: 0.0002
-    betas: (0.5, 0.999)
+    betas: [0.5, 0.999]
   discA:
     lr: 0.0002
-    betas: (0.5, 0.999)
+    betas: [0.5, 0.999]
   discB:
     lr: 0.0002
-    betas: (0.5, 0.999)
+    betas: [0.5, 0.999]
 
 models:
   # If pretrained model wasn't loaded 
   # Initialze model weights with Gaussian distribution N(0, 0.2)
-  ini_mean: 0.0
-  ini_std: 0.2
+  mean: 0.0
+  std: 0.2

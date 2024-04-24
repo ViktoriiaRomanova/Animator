@@ -1,19 +1,27 @@
-from typing import TypedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
+import warnings
 
-def pre_init(func):
-    def decorated(args, **kwargs):
-        print(func.__name__)
-        return func(**args)
-    return decorated
+def nested_dataclass(*args, **kwargs):
+    def wrapper(in_cls):
+        in_cls = dataclass(in_cls, **kwargs)
+        original_init = in_cls.__init__
+        def __init__(self, *args, **kwargs):
+            for name, val in kwargs.items():
+                field_type = in_cls.__annotations__.get(name, None)
+                if is_dataclass(field_type) and isinstance(val, dict):
+                    kwargs[name] = field_type(**val)
+                elif field_type is None:
+                    warnings.warn('Hyperparameters settings contain unexpected parameter {}'.format(name))
+            original_init(self, *args, **kwargs)
+        in_cls.__init__ = __init__
+        return in_cls
+    return wrapper(args[0]) if args else wrapper
 
-@pre_init
 @dataclass(kw_only = True)
 class DataParams:
     data_part: float
     sub_part_data: float
 
-@pre_init
 @dataclass(kw_only = True)
 class DistParams:
     world_size: int
@@ -21,26 +29,25 @@ class DistParams:
     port: str
     address: str
 
-@pre_init
 @dataclass(kw_only = True)
 class OptimParams:
     lr: float
     betas: tuple[float, float]
+    def __post_init__(self):
+        self.betas = tuple(self.betas)
 
-@pre_init
-@dataclass(kw_only = True)
+
+@nested_dataclass
 class AllOptimParams:
     gen: OptimParams
     discA: OptimParams
     discB: OptimParams
 
-@pre_init
 @dataclass(kw_only = True)
 class ModelParams:
     mean: float
     std: float
 
-@pre_init
 @dataclass(kw_only = True)
 class MainParams:
     random_state: int
@@ -48,8 +55,8 @@ class MainParams:
     epochs: int
     buffer_size: int
 
-@pre_init
-@dataclass(kw_only = True)
+
+@nested_dataclass
 class TrainingParams:
     main: MainParams    
     data: DataParams
