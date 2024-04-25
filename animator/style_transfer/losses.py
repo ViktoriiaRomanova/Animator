@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 
+__all__ = ['AdversarialLoss', 'CycleLoss', 'IdentityLoss']
 # TO DO: add description everywhere 
 
 class AdversarialLoss(nn.Module):
@@ -43,7 +44,7 @@ class CycleLoss(nn.Module):
              + self.loss(obtained_Y, real_Y) * self.lambda_B
 
 class IdentityLoss(nn.Module):
-    def __init__(self, ltype: str, lambda_idn: float = 0.5) -> None:
+    def __init__(self, ltype: str = 'L1', lambda_idn: float = 0.5) -> None:
         super().__init__()
         self.lambda_idn = lambda_idn
         if ltype == 'L1':

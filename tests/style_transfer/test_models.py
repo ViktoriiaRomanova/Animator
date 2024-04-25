@@ -9,8 +9,9 @@ class ModelsTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.gen = Generator()
         cls.disc = Discriminator()
-        batch_size, in_ch, H, W = 5, 3, 224, 224
-        cls.input = torch.rand((batch_size, in_ch, H, W))
+        cls.BATCH_SIZE = 5
+        cls.INPUT_SIZE = (3, 224, 224)
+        cls.input = torch.rand((cls.BATCH_SIZE, *cls.INPUT_SIZE))
     
     @classmethod
     def tearDownClass(cls) -> None:
@@ -18,7 +19,11 @@ class ModelsTests(unittest.TestCase):
 
     def test_generator_forward_output_size(self) -> None:
         output_tensor = self.gen(self.input)
-        self.assertEqual(output_tensor.shape[1:], (3, 224, 224))
+        self.assertEqual(output_tensor.shape[1:], self.INPUT_SIZE)
+
+    def test_discriminator_forward_output_size(self) -> None:
+        output_tensor = self.disc(self.input)
+        self.assertEqual(output_tensor.size(dim = 1), 1)
     
 
 if __name__ == '__main__':
