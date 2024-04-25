@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+__all__ = ['Generator', 'Discriminator']
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_ch: int) -> None:
         super(ResidualBlock, self).__init__()
@@ -42,13 +44,13 @@ class Generator(nn.Module):
         out_ch = in_ch // 2
         # Add upsampling
         for _ in range(2):
-            layers += [nn.ConvTranspose2d(in_ch, out_ch, kernel_size = 3, stride = 2, output_padding = 1),
+            layers += [nn.ConvTranspose2d(in_ch, out_ch, kernel_size = 3, stride = 2, padding = 1, output_padding = 1),
                        nn.InstanceNorm2d(out_ch),
                        nn.ReLU(True)]
             in_ch, out_ch = out_ch, out_ch // 2
 
         out_ch = 3
-        layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 7, stride = 1, padding = 1, padding_mode = 'reflect', bias = True),
+        layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 7, stride = 1, padding = 3, padding_mode = 'reflect', bias = True),
                    nn.InstanceNorm2d(out_ch),
                    nn.Tanh()]
         
