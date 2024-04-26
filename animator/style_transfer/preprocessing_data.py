@@ -8,8 +8,9 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision import io
 
-from utils import _base_preprocessing_data as _bp
+from ..utils import _base_preprocessing_data as _bp
 
+__all__ = ['PreprocessingData', 'GetDataset']
 
 class PreprocessingData(_bp.BasePreprocessingData):
     """Collect file names, split into train and test."""
@@ -53,7 +54,7 @@ class GetDataset(Dataset, _bp.BaseDataset):
         """
         super().__init__(img_dir, data, transform, size, mean, std)
 
-    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
+    def __getitem__(self, idx: int) -> Tensor:
         """Return image/transformed image and it's mask by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
         
