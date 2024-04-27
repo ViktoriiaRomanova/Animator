@@ -1,6 +1,6 @@
 main: 
   random_state: 10
-  batch_size: 64
+  batch_size: 1
   epochs: 2
   buffer_size: 50 # Size of the buffer to store generated images
 

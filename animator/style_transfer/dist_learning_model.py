@@ -9,7 +9,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from base_distributed._distributed_model import BaseDist
+from animator.base_distributed._distributed_model import BaseDist
 from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from utils.buffer import ImageBuffer
@@ -115,44 +115,44 @@ class DistLearning(BaseDist):
                                 prefetch_factor = 16,
                                 multiprocessing_context = 'spawn',
                                 persistent_workers = True,
-                                pin_memory_device = str(self.device))
+                                pin_memory_device = self.device.type)
         return data_loader
     
-    @torch.autocast(device_type = 'cuda', dtype = torch.float16)
     def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
-        self.set_requires_grad(self.discs, False)
+        with torch.autocast(device_type = self.device.type, dtype = torch.float16):
+            self.set_requires_grad(self.discs, False)
 
-        fakeY = self.genA(X)
-        cycle_fakeX = self.genB(fakeY)
-        fakeX = self.genB(Y)
-        cycle_fakeY = self.genA(fakeX)
+            fakeY = self.genA(X)
+            cycle_fakeX = self.genB(fakeY)
+            fakeX = self.genB(Y)
+            cycle_fakeY = self.genA(fakeX)
 
-        self.fake_X_buffer.add(fakeX.detach())
-        self.fake_Y_buffer.add(fakeY.detuch())
+            self.fake_X_buffer.add(fakeX.detach())
+            self.fake_Y_buffer.add(fakeY.detuch())
 
-        loss = self.adv_loss(self.discB(fakeX), True) + self.adv_loss(self.discA(fakeY), True) + \
-            + self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
-            + self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+            loss = self.adv_loss(self.discB(fakeX), True) + self.adv_loss(self.discA(fakeY), True) + \
+                + self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
+                + self.idn_loss(self.genB(X), self.genA(Y), X, Y)
         
         return loss
 
-    @torch.autocast(device_type = 'cuda', dtype = torch.float16)
     def forward_disc(self, X: torch.Tensor, Y: torch.Tensor,
                      adv_alpha: float = 0.5) -> tuple[torch.Tensor, torch.Tensor]:
 
-        self.set_requires_grad(self.discs, True)
+        with torch.autocast(device_type = self.device.type, dtype = torch.float16):
+            self.set_requires_grad(self.discs, True)
 
-        ans_disc_A = self.discA(self.fake_Y_buffer.get())
-        ans_disc_B = self.discB(self.fake_X_buffer.get()) 
+            ans_disc_A = self.discA(self.fake_Y_buffer.get())
+            ans_disc_B = self.discB(self.fake_X_buffer.get()) 
 
-        lossA = adv_alpha * (self.adv_loss(ans_disc_A, False) + \
-              + self.adv_loss(Y, True))
+            lossA = adv_alpha * (self.adv_loss(ans_disc_A, False) + \
+                + self.adv_loss(Y, True))
 
-        lossB = adv_alpha * (self.adv_loss(ans_disc_B, False) + \
-              + self.adv_loss(X, True))
+            lossB = adv_alpha * (self.adv_loss(ans_disc_B, False) + \
+                + self.adv_loss(X, True))
         
-        del ans_disc_A, ans_disc_B
+            del ans_disc_A, ans_disc_B
         return lossA, lossB
 
     
