@@ -27,7 +27,10 @@ class DistLearning(BaseDist):
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
 
-        train_set = GetDataset(init_args.dataset, train_data)
+        train_set = GetDataset(init_args.dataset, train_data,
+                               params.data.size,
+                               params.data.mean,
+                               params.data.std)
         self.train_loader = self.prepare_dataloader(train_set, rank,
                                                     self.world_size, self.batch_size, 
                                                     self.random_seed)
@@ -73,9 +76,14 @@ class DistLearning(BaseDist):
         
         self.epochs += self.start_epoch
 
-        self.adv_loss = torch.colmpile(AdversarialLoss(ltype = 'MSE'))
-        self.cycle_loss = torch.compile(CycleLoss('L1'))
-        self.idn_loss = torch.compile(IdentityLoss('L1'))
+        self.adv_loss = torch.colmpile(AdversarialLoss(params.loss.adversarial.ltype,
+                                                       params.loss.adversarial.real_val,
+                                                       params.loss.adversarial.fake_val))
+        self.cycle_loss = torch.compile(CycleLoss(params.loss.cycle.ltype,
+                                                  params.loss.cycle.lambda_A,
+                                                  params.loss.cycle.lambda_B))
+        self.idn_loss = torch.compile(IdentityLoss(params.loss.identity.ltype,
+                                                   params.loss.cycle.lambda_idn))
 
         for model in self.models:
             model.compile()

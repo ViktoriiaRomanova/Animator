@@ -18,6 +18,12 @@ def nested_dataclass(*args, **kwargs):
 class DataParams:
     data_part: float
     sub_part_data: float
+    size: list[int, int]
+    mean: tuple[float, float, float]
+    std: tuple[float, float, float]
+    def __post_init__(self):
+        self.mean = tuple(self.mean)
+        self.std = tuple(self.std)
 
 @dataclass(kw_only = True)
 class DistParams:
@@ -52,6 +58,31 @@ class MainParams:
     epochs: int
     buffer_size: int
 
+@dataclass
+class BaseLossParams:
+    ltype: str
+
+@dataclass
+class AdversarialParams(BaseLossParams):
+    real_val: float
+    fake_val: float
+    adv_loss: float
+
+@dataclass
+class CycleParams(BaseLossParams):
+    lambda_A: float
+    lambda_B: float
+
+@dataclass
+class IdentityParams(BaseLossParams):
+    lambda_idn: float
+
+
+@dataclass
+class LossParams:
+    adversarial: AdversarialParams
+    cycle: CycleParams
+    identity: IdentityParams
 
 @nested_dataclass
 class TrainingParams:
@@ -60,5 +91,4 @@ class TrainingParams:
     distributed: DistParams
     optimizers: AllOptimParams
     models: ModelParams
-
-
+    loss: LossParams
