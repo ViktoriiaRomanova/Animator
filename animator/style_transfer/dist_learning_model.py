@@ -12,9 +12,9 @@ from torch.utils.data.distributed import DistributedSampler
 from animator.base_distributed._distributed_model import BaseDist
 from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
-from utils.buffer import ImageBuffer
+from ..utils.buffer import ImageBuffer
 from .preprocessing_data import GetDataset
-from utils.parameter_storages import TrainingParams
+from ..utils.parameter_storages import TrainingParams
 
 class DistLearning(BaseDist):
     def __init__(self, rank: int, init_args: Namespace, 
@@ -28,9 +28,9 @@ class DistLearning(BaseDist):
         self.epochs = params.main.epochs
 
         train_set = GetDataset(init_args.dataset, train_data,
-                               params.data.size,
-                               params.data.mean,
-                               params.data.std)
+                               size = params.data.size,
+                               mean = params.data.mean,
+                               std = params.data.std)
         self.train_loader = self.prepare_dataloader(train_set, rank,
                                                     self.world_size, self.batch_size, 
                                                     self.random_seed)
@@ -64,8 +64,6 @@ class DistLearning(BaseDist):
                                             lr = params.optimizers.discB.lr,
                                             betas = params.optimizers.discB.betas)
         
-        self.optims = nn.ModuleList[self.optim_gen, self.optim_discA, self.optim_discB]
-
         if init_args.imodel is None:
             # Initialze model weights with Gaussian distribution
             self.start_epoch = 0
@@ -76,7 +74,7 @@ class DistLearning(BaseDist):
         
         self.epochs += self.start_epoch
 
-        self.adv_loss = torch.colmpile(AdversarialLoss(params.loss.adversarial.ltype,
+        self.adv_loss = torch.compile(AdversarialLoss(params.loss.adversarial.ltype,
                                                        params.loss.adversarial.real_val,
                                                        params.loss.adversarial.fake_val))
         self.cycle_loss = torch.compile(CycleLoss(params.loss.cycle.ltype,
@@ -93,7 +91,9 @@ class DistLearning(BaseDist):
         weights_dir = os.path.join(working_directory, path)
         state = torch.load(weights_dir, map_location = device)
         self.models.load_state_dict(state['models'])
-        self.optims.load_state_dict(state['optims'])
+        self.optim_gen.load_state_dict(state['optim_gen'])
+        self.optim_discA.load_state_dict(state['optim_discA'])
+        self.optim_discB.load_state_dict(state['optim_discB'])
         self.scaler.load_state_dict(state['staler'])
         return state['epoch'] + 1
 
@@ -215,7 +215,9 @@ class DistLearning(BaseDist):
             
                 if (epoch + 1) % 20 == 0:                   
                     torch.save({'models': self.models.state_dict(),
-                                'optims': self.optims.state_dict(),
+                                'optim_gen': self.optim_gen.state_dict(),
+                                'optim_discA': self.optim_discA.state_dict(),
+                                'optim_discB': self.optim_discB.state_dict(),
                                 'epoch': epoch,
                                 'scaler': self.scaler.state_dict()}, 
                             os.path.join(self.model_weights_dir, str(epoch) + '.pt'))

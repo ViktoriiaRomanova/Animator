@@ -58,27 +58,27 @@ class MainParams:
     epochs: int
     buffer_size: int
 
-@dataclass
+@dataclass(kw_only = True)
 class BaseLossParams:
     ltype: str
 
-@dataclass
+@dataclass(kw_only = True)
 class AdversarialParams(BaseLossParams):
     real_val: float
     fake_val: float
-    adv_loss: float
+    adv_alpha: float
 
-@dataclass
+@dataclass(kw_only = True)
 class CycleParams(BaseLossParams):
     lambda_A: float
     lambda_B: float
 
-@dataclass
+@dataclass(kw_only = True)
 class IdentityParams(BaseLossParams):
     lambda_idn: float
 
 
-@dataclass
+@nested_dataclass
 class LossParams:
     adversarial: AdversarialParams
     cycle: CycleParams

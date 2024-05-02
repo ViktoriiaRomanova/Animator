@@ -9,7 +9,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from utils.parameter_storages import DistParams
+from ..utils.parameter_storages import DistParams
 
 
 class BaseDist(ABC):
@@ -74,7 +74,7 @@ class BaseDist(ABC):
     
     def _init_weights(self, module: nn.Module, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
-        def init_func(sub_mod: nn.Model) -> None:
+        def init_func(sub_mod: nn.Module) -> None:
             module_to_init = {nn.Conv2d, nn.Linear, nn.BatchNorm2d}
             if type(sub_mod) in module_to_init:
                 nn.init.normal_(sub_mod.weight, mean, std)
@@ -83,7 +83,8 @@ class BaseDist(ABC):
         module.apply(init_func)
     
     def _ddp_wrapper(self, model: nn.Module) -> nn.Module:
-        return DDP(model, device_ids = self.device, output_device = self.device,
+        return DDP(model, device_ids = self.device if self.device.type != 'cpu' else None,
+                   output_device = self.device  if self.device.type != 'cpu' else None,
                    find_unused_parameters = False)
 
     def make_archive(self, source: str, destination: str) -> None:
