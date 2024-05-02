@@ -19,7 +19,8 @@ from ..utils.parameter_storages import TrainingParams
 class DistLearning(BaseDist):
     def __init__(self, rank: int, init_args: Namespace, 
                  params: TrainingParams,
-                 train_data: list[str], val_data: list[str] | None,
+                 train_data: list[list[str], list[str]],
+                 val_data: list[list[str], list[str]] | None,
                 ) -> None:
         super().__init__(rank, params.distributed, params.main.random_state)
 
@@ -27,11 +28,21 @@ class DistLearning(BaseDist):
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
 
-        train_set = GetDataset(init_args.dataset, train_data,
+        train_setX = GetDataset(init_args.datasetX, train_data[0],
                                size = params.data.size,
                                mean = params.data.mean,
                                std = params.data.std)
-        self.train_loader = self.prepare_dataloader(train_set, rank,
+        
+        train_setY = GetDataset(init_args.datasetY, train_data[1],
+                               size = params.data.size,
+                               mean = params.data.mean,
+                               std = params.data.std)
+        
+        self.train_loaderX = self.prepare_dataloader(train_setX, rank,
+                                                    self.world_size, self.batch_size, 
+                                                    self.random_seed)
+        
+        self.train_loaderY = self.prepare_dataloader(train_setY, rank,
                                                     self.world_size, self.batch_size, 
                                                     self.random_seed)
 
@@ -49,7 +60,7 @@ class DistLearning(BaseDist):
 
         self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
-        self.scaler = torch.cuda.amp.GradScaler(enabled = True)
+        self.scaler = torch.cuda.amp.GradScaler(enabled = self.device.type == 'cuda')
 
         self.fake_Y_buffer = ImageBuffer(params.main.buffer_size)
         self.fake_X_buffer = ImageBuffer(params.main.buffer_size)
@@ -81,7 +92,7 @@ class DistLearning(BaseDist):
                                                   params.loss.cycle.lambda_A,
                                                   params.loss.cycle.lambda_B))
         self.idn_loss = torch.compile(IdentityLoss(params.loss.identity.ltype,
-                                                   params.loss.cycle.lambda_idn))
+                                                   params.loss.identity.lambda_idn))
 
         for model in self.models:
             model.compile()
@@ -110,17 +121,20 @@ class DistLearning(BaseDist):
                                     seed = seed, drop_last = True)
         data_loader = DataLoader(data, batch_size = batch_size,
                                 shuffle = False, drop_last = True,
-                                sampler = sampler, pin_memory = True,
+                                sampler = sampler,
+                                pin_memory = self.device.type != 'cpu',
                                 num_workers = 1,
                                 prefetch_factor = 16,
                                 multiprocessing_context = 'spawn',
-                                persistent_workers = True,
-                                pin_memory_device = self.device.type)
+                                persistent_workers = self.device.type != 'cpu',
+                                pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
         return data_loader
     
     def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
-        with torch.autocast(device_type = self.device.type, dtype = torch.float16):
+        with torch.autocast(device_type = self.device.type,
+                            dtype = torch.float16,
+                            enabled = self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, False)
 
             fakeY = self.genA(X)
@@ -129,7 +143,7 @@ class DistLearning(BaseDist):
             cycle_fakeY = self.genA(fakeX)
 
             self.fake_X_buffer.add(fakeX.detach())
-            self.fake_Y_buffer.add(fakeY.detuch())
+            self.fake_Y_buffer.add(fakeY.detach())
 
             loss = self.adv_loss(self.discB(fakeX), True) + self.adv_loss(self.discA(fakeY), True) + \
                 + self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
@@ -140,7 +154,9 @@ class DistLearning(BaseDist):
     def forward_disc(self, X: torch.Tensor, Y: torch.Tensor,
                      adv_alpha: float = 0.5) -> tuple[torch.Tensor, torch.Tensor]:
 
-        with torch.autocast(device_type = self.device.type, dtype = torch.float16):
+        with torch.autocast(device_type = self.device.type,
+                            dtype = torch.float16,
+                            enabled = self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, True)
 
             ans_disc_A = self.discA(self.fake_Y_buffer.get())
@@ -168,8 +184,8 @@ class DistLearning(BaseDist):
         self.scaler.scale(lossA).backward()
         self.scaler.scale(lossB).backward()
 
-        self.scaler.step(self.opitm_discA)
-        self.scaler.step(self.opitm_discB)
+        self.scaler.step(self.optim_discA)
+        self.scaler.step(self.optim_discB)
 
         # Update scaler after last "step"
         self.scaler.update()
@@ -177,23 +193,25 @@ class DistLearning(BaseDist):
     def execute(self,) -> None:
 
         for epoch in range(self.start_epoch, self.epochs):
-            self.train_loader.sampler.set_epoch(epoch - self.start_epoch)
+            self.train_loaderX.sampler.set_epoch(epoch - self.start_epoch)
+            self.train_loaderY.sampler.set_epoch(epoch - self.start_epoch)
 
             avg_loss_gens, avg_loss_disc_A, avg_loss_disc_B = 0, 0, 0
+            num_butch = min(len(self.train_loaderX), len(self.train_loaderY))
             self.models.train()
 
-            for x_batch, y_batch in tqdm(self.train_loader):
+            for x_batch, y_batch in tqdm(zip(self.train_loaderX, self.train_loaderY)):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
-                loss = self.forward(x_batch, y_batch)
+                loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
-                loss_disc_A, loss_disc_B = self.forward(x_batch, y_batch)
+                loss_disc_A, loss_disc_B = self.forward_disc(x_batch, y_batch)
                 self.backward_disc(loss_disc_A, loss_disc_B)
             
                 # Calculate average train loss
-                avg_loss_gens += (loss / len(self.train_loader)).detach()
-                avg_loss_disc_A += (loss_disc_A / len(self.train_loader)).detach()
-                avg_loss_disc_B += (loss_disc_B / len(self.train_loader)).detach()
+                avg_loss_gens += (loss / num_butch).detach()
+                avg_loss_disc_A += (loss_disc_A / num_butch).detach()
+                avg_loss_disc_B += (loss_disc_B / num_butch).detach()
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
 
@@ -204,7 +222,7 @@ class DistLearning(BaseDist):
                                     avg_loss_disc_B / self.world_size], device = self.device)
             dist.all_reduce(metrics, op = dist.ReduceOp.SUM)
 
-            if self.device.index == 0:
+            if self.rank == 0:
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
                 json_metrics = jdumps({'gens_loss' : metrics[0].item(),
                                        'disc_A_loss' : metrics[1].item(),
@@ -213,7 +231,7 @@ class DistLearning(BaseDist):
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
             
-                if (epoch + 1) % 20 == 0:                   
+                if (epoch + 1) % 1 == 0:                   
                     torch.save({'models': self.models.state_dict(),
                                 'optim_gen': self.optim_gen.state_dict(),
                                 'optim_discA': self.optim_discA.state_dict(),
@@ -221,6 +239,6 @@ class DistLearning(BaseDist):
                                 'epoch': epoch,
                                 'scaler': self.scaler.state_dict()}, 
                             os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
-        if self.device.index == 0:           
+        if self.rank == 0:           
             self.make_archive(self.model_weights_dir, self.init_args.omodel)
         dist.destroy_process_group()

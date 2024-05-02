@@ -34,6 +34,7 @@ class BaseDist(ABC):
         !!!ADD DESCRIPTION HERE!!!
  
         """        
+        self.rank = rank
         self.world_size = params.world_size
         self.random_seed = random_state
         # Set GPU number for this process
@@ -55,6 +56,8 @@ class BaseDist(ABC):
         """Setup the process group."""
         os.environ['MASTER_ADDR'] = params.address
         os.environ['MASTER_PORT'] = params.port
+
+        if self.device.type == 'cpu': torch.set_num_threads(1) # for test purposes
 
         # initialize the process group
         # 'nccl' -- for GPU

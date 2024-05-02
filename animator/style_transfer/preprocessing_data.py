@@ -15,7 +15,8 @@ __all__ = ['PreprocessingData', 'GetDataset']
 class PreprocessingData(_bp.BasePreprocessingData):
     """Collect file names, split into train and test."""
 
-    def __init__(self, train_size: float = 0.95, checker: Callable[[str], bool] | None = None) -> None:
+    def __init__(self, train_size: float = 0.95,
+                 checker: Callable[[str], bool] | None = None) -> None:
         super().__init__(train_size)
         self.checker = checker if checker is not None else self.check       
 
