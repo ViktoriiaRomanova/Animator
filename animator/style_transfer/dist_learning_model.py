@@ -105,7 +105,7 @@ class DistLearning(BaseDist):
         self.optim_gen.load_state_dict(state['optim_gen'])
         self.optim_discA.load_state_dict(state['optim_discA'])
         self.optim_discB.load_state_dict(state['optim_discB'])
-        self.scaler.load_state_dict(state['staler'])
+        self.scaler.load_state_dict(state['scaler'])
         return state['epoch'] + 1
 
     def prepare_dataloader(self, data: GetDataset, rank: int,
