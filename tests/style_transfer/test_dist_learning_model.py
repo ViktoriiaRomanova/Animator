@@ -31,7 +31,7 @@ def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params
                    train_data: list[str], val_data: list[str]) -> None:
 
             torch.set_num_threads(1)
-            dist_process = DistLearning(rank, args, params, train_data, val_data)
+            dist_process = DistLearning(rank, args, params, torch.Generator(), train_data, val_data)
             state = pickle.dumps(dist_process.save_model(max(0, dist_process.start_epoch - 1)))
             conn_queue.put(state)
             dist_process.execute()
@@ -107,11 +107,9 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
         is_equal = True
-        state = conn_queue.get()
+        state = pickle.loads(conn_queue.get())
         while conn_queue.qsize() > 0:
-              is_equal &= state == conn_queue.get()
-
-        print(is_equal)
+              is_equal &= compare_states(state, pickle.loads(conn_queue.get()))
 
         time.sleep(SLEEP_TIME_MODEL_EXE)
         self.assertTrue(context.join() and

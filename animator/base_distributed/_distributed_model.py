@@ -75,12 +75,12 @@ class BaseDist(ABC):
 
         return model_weights_dir
     
-    def _init_weights(self, module: nn.Module, mean: float, std: float) -> None:
+    def _init_weights(self, module: nn.Module, mean: float, std: float, generator: torch.Generator) -> None:
         """Initialize model weights by a torch.nn.init function."""
         def init_func(sub_mod: nn.Module) -> None:
             module_to_init = {nn.Conv2d, nn.Linear, nn.BatchNorm2d}
             if type(sub_mod) in module_to_init:
-                nn.init.normal_(sub_mod.weight, mean, std)
+                nn.init.normal_(sub_mod.weight, mean, std, generator)
                 nn.init.constant_(sub_mod.bias, 0.0)
 
         module.apply(init_func)
