@@ -5,6 +5,7 @@ import os
 import time
 import shutil
 import multiprocessing
+import pickle
 
 import torch.multiprocessing as mp
 import torch
@@ -17,38 +18,40 @@ DATA_PATH = 'tests/style_transfer/test_img'
 MODEL_CHECKPOINTS = 'tests/style_transfer/checkpoints/train_checkpoints.zip'
 HYPERPARAMETERS = 'animator/train_eval/style_transfer/hyperparameters.yaml'
 
+SLEEP_TIME_DATA_LOADING = 10
+SLEEP_TIME_MODEL_EXE = 100
+
 def worker_init(rank: int, args: Namespace, params: TrainingParams,
                    train_data: list[str], val_data: list[str]) -> None:
 
             torch.set_num_threads(1)
-            dist_process = DistLearning(rank, args, params, train_data, val_data)
+            _ = DistLearning(rank, args, params, train_data, val_data)
 
-def worker_run(rank: int, args: Namespace, params: TrainingParams,
+def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: TrainingParams,
                    train_data: list[str], val_data: list[str]) -> None:
 
             torch.set_num_threads(1)
             dist_process = DistLearning(rank, args, params, train_data, val_data)
-            dist_process.execute()
-
-def worker_load(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: TrainingParams,
-                   train_data: list[str], val_data: list[str]) -> None:
-
-            torch.set_num_threads(1)
-            dist_process = DistLearning(rank, args, params, train_data, val_data)
-            state = {'models': dist_process.models.state_dict(),
-                                'optim_gen': dist_process.optim_gen.state_dict(),
-                                'optim_discA': dist_process.optim_discA.state_dict(),
-                                'optim_discB': dist_process.optim_discB.state_dict(),
-                                'epoch': dist_process.start_epoch - 1,
-                                'scaler': dist_process.scaler.state_dict()}.__str__()
+            state = pickle.dumps(dist_process.save_model(max(0, dist_process.start_epoch - 1)))
             conn_queue.put(state)
             dist_process.execute()
-    
+
+def compare_states(state1: dict, state2: dict) -> bool:
+    if len(state1) != len(state2): return False
+    ans = True
+    for key in state1:
+        if key not in state2: return False
+        ans &= state1[key].__str__() == state2[key].__str__()
+        if not ans: return ans
+    return ans    
 
 
 class MainTrainingPipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+
+        multiprocessing.set_start_method('spawn')
+
         dir = os.path.dirname(MODEL_CHECKPOINTS)
         if not os.path.exists(dir):
            os.makedirs(dir)
@@ -95,33 +98,45 @@ class MainTrainingPipelineTests(unittest.TestCase):
         time.sleep(5)
         self.assertTrue(context.join())
 
-    def test_DistLearning_run_save_model(self,) -> None: 
+    def test_DistLearning_run_init_save_model(self,) -> None: 
+
+        conn_queue = multiprocessing.Queue()
     
-        context = mp.spawn(worker_run, args = (self.base_param, self.params, self.train_data, self.val_data),
+        context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        time.sleep(100)
-        self.assertTrue(os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024 and context.join())
-       
+        time.sleep(SLEEP_TIME_DATA_LOADING)
+        is_equal = True
+        state = conn_queue.get()
+        while conn_queue.qsize() > 0:
+              is_equal &= state == conn_queue.get()
+
+        print(is_equal)
+
+        time.sleep(SLEEP_TIME_MODEL_EXE)
+        self.assertTrue(context.join() and
+                        is_equal and
+                        os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+
+
     def test_DistLearning_load_save_model(self,) -> None:
 
         self.base_param.imodel = 'tests/style_transfer/test_weights/0.pt'
-        multiprocessing.set_start_method('spawn')
 
         conn_queue = multiprocessing.Queue()
 
-        context = mp.spawn(worker_load, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
+        context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        time.sleep(10)
-        init_state = torch.load(self.base_param.imodel).__str__()
+        time.sleep(SLEEP_TIME_DATA_LOADING)
+        init_state = torch.load(self.base_param.imodel)
         is_equal = True
         while conn_queue.qsize() > 0:
-              state = conn_queue.get()
-              is_equal &= state == init_state
+              state = pickle.loads(conn_queue.get())
+              is_equal &= compare_states(state, init_state)
 
-        time.sleep(100)
-        
+        time.sleep(SLEEP_TIME_MODEL_EXE)
+
         self.assertTrue(context.join() and
                         is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
