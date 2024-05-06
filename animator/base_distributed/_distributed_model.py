@@ -127,6 +127,13 @@ class BaseDist(ABC):
             Method to load model, optimizer, etc. saved state.
         """
         pass
+
+    @abstractmethod
+    def save_model(self,):
+        """
+            Method to save model, optimizer, etc. state.
+        """
+        pass
         
 
 

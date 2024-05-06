@@ -75,6 +75,12 @@ class DistLearning(BaseDist):
                                             lr = params.optimizers.discB.lr,
                                             betas = params.optimizers.discB.betas)
         
+        self.save_load_params = {'models': self.models,
+                                 'optim_gen': self.optim_gen,
+                                 'optim_discA': self.optim_discA,
+                                 'optim_discB': self.optim_discB,
+                                 'scaler': self.scaler}
+        
         if init_args.imodel is None:
             # Initialze model weights with Gaussian distribution
             self.start_epoch = 0
@@ -101,12 +107,18 @@ class DistLearning(BaseDist):
         working_directory = os.getcwd()
         weights_dir = os.path.join(working_directory, path)
         state = torch.load(weights_dir, map_location = device)
-        self.models.load_state_dict(state['models'])
-        self.optim_gen.load_state_dict(state['optim_gen'])
-        self.optim_discA.load_state_dict(state['optim_discA'])
-        self.optim_discB.load_state_dict(state['optim_discB'])
-        self.scaler.load_state_dict(state['scaler'])
+
+        for key, param in self.save_load_params.items():
+            param.load_state_dict(state[key])
+
         return state['epoch'] + 1
+
+    def save_model(self, epoch: int) -> dict:
+        state = {}
+        for key, param in self.save_load_params.items():
+            state[key] = param.state_dict()
+        state['epoch'] = epoch
+        return state
 
     def prepare_dataloader(self, data: GetDataset, rank: int,
                     world_size: int, batch_size: int,
@@ -232,12 +244,7 @@ class DistLearning(BaseDist):
                 print(json_metrics)
             
                 if (epoch + 1) % 1 == 0:                   
-                    torch.save({'models': self.models.state_dict(),
-                                'optim_gen': self.optim_gen.state_dict(),
-                                'optim_discA': self.optim_discA.state_dict(),
-                                'optim_discB': self.optim_discB.state_dict(),
-                                'epoch': epoch,
-                                'scaler': self.scaler.state_dict()}, 
+                    torch.save(self.save_model(epoch), 
                             os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
         if self.rank == 0:           
             self.make_archive(self.model_weights_dir, self.init_args.omodel)
