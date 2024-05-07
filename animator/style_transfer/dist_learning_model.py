@@ -19,7 +19,6 @@ from ..utils.parameter_storages import TrainingParams
 class DistLearning(BaseDist):
     def __init__(self, rank: int, init_args: Namespace, 
                  params: TrainingParams,
-                 generator: torch.Generator,
                  train_data: list[list[str], list[str]],
                  val_data: list[list[str], list[str]] | None
                 ) -> None:
@@ -86,7 +85,7 @@ class DistLearning(BaseDist):
             # Initialze model weights with Gaussian distribution
             self.start_epoch = 0
             self._init_weights(self.models, mean = params.models.mean,
-                               std = params.models.std, generator = generator)
+                               std = params.models.std)
         else:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         

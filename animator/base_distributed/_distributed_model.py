@@ -37,6 +37,8 @@ class BaseDist(ABC):
         self.rank = rank
         self.world_size = params.world_size
         self.random_seed = random_state
+        self.generator = torch.Generator().manual_seed(random_state)
+
         # Set GPU number for this process
         if params.backend == 'nccl':
             self.device = torch.device(rank)
@@ -75,12 +77,12 @@ class BaseDist(ABC):
 
         return model_weights_dir
     
-    def _init_weights(self, module: nn.Module, mean: float, std: float, generator: torch.Generator) -> None:
+    def _init_weights(self, module: nn.Module, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
         def init_func(sub_mod: nn.Module) -> None:
             module_to_init = {nn.Conv2d, nn.Linear, nn.BatchNorm2d}
             if type(sub_mod) in module_to_init:
-                nn.init.normal_(sub_mod.weight, mean, std, generator)
+                nn.init.normal_(sub_mod.weight, mean, std, self.generator)
                 nn.init.constant_(sub_mod.bias, 0.0)
 
         module.apply(init_func)
