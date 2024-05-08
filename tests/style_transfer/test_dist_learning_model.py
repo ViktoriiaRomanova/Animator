@@ -18,7 +18,7 @@ DATA_PATH = 'tests/style_transfer/test_img'
 MODEL_CHECKPOINTS = 'tests/style_transfer/checkpoints/train_checkpoints.zip'
 HYPERPARAMETERS = 'animator/train_eval/style_transfer/hyperparameters.yaml'
 
-SLEEP_TIME_DATA_LOADING = 5
+SLEEP_TIME_DATA_LOADING = 10
 SLEEP_TIME_MODEL_EXE = 100
 
 def setUpModule() -> None:
@@ -99,11 +99,17 @@ class MainTrainingPipelineTests(unittest.TestCase):
                                                 cls.params.data.data_part)
         cls.train_data = [train_dataX, train_dataY]
         cls.val_data = [val_dataX, val_dataY]
+    
+    @classmethod
+    def tearDownClass(cls) -> None:
+        del cls.train_data, cls.val_data, cls.params, cls.base_param
         
     def tearDown(self) -> None:
-        os.remove(MODEL_CHECKPOINTS)
+        self.base_param.imodel = None
+        if os.path.exists(MODEL_CHECKPOINTS):
+            os.remove(MODEL_CHECKPOINTS)
 
-    def test_DistLearning_init_setup(self,) -> None:        
+    def test_DistLearning_init_setup(self,) -> None:     
         context = mp.spawn(worker_init, args = (self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
@@ -112,7 +118,6 @@ class MainTrainingPipelineTests(unittest.TestCase):
         self.assertTrue(context.join())
 
     def test_DistLearning_run_init_save_model(self,) -> None: 
-
         conn_queue = multiprocessing.Queue()
     
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
@@ -125,21 +130,20 @@ class MainTrainingPipelineTests(unittest.TestCase):
               is_equal &= compare_states(state, pickle.loads(conn_queue.get()))
 
         time.sleep(SLEEP_TIME_MODEL_EXE)
+
         self.assertTrue(context.join() and
                         is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+        del state
 
 
     def test_DistLearning_load_save_model(self,) -> None:
-
         self.base_param.imodel = 'tests/style_transfer/test_weights/0.pt'
 
         conn_queue = multiprocessing.Queue()
 
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
-
-        self.base_param.imodel = None
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
         init_state = torch.load(self.base_param.imodel)
@@ -153,6 +157,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         self.assertTrue(context.join() and
                         is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+        del state, init_state
 
 
 class DistSamplerTests(unittest.TestCase):
@@ -185,8 +190,11 @@ class DistSamplerTests(unittest.TestCase):
         cls.train_data = [train_dataX, train_dataY]
         cls.val_data = [val_dataX, val_dataY]
     
+    @classmethod
+    def tearDownClass(cls) -> None:
+        del cls.train_data, cls.val_data, cls.params, cls.base_param
+    
     def test_DistLearning_sampler(self,) -> None:
-
         conn_queue = multiprocessing.Queue()
     
         context = mp.spawn(worker_sampler, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
@@ -196,9 +204,7 @@ class DistSamplerTests(unittest.TestCase):
         samples_0 = conn_queue.get()
         samples_1 = conn_queue.get()
 
-        is_intersect = len(samples_0) == len(samples_1) == (len(self.train_data[0]) // 2) \
+        is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data[0]) // 2) \
                    and (len(samples_0 & samples_1) == 0)
-        time.sleep(100)
-        print(context.join())
 
-        self.assertTrue(context.join() and not is_intersect)
+        self.assertTrue(context.join() and is_not_intersect)
