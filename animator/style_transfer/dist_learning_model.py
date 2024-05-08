@@ -16,6 +16,8 @@ from ..utils.buffer import ImageBuffer
 from .preprocessing_data import GetDataset
 from ..utils.parameter_storages import TrainingParams
 
+__all__ = ['DistLearning']
+
 class DistLearning(BaseDist):
     def __init__(self, rank: int, init_args: Namespace, 
                  params: TrainingParams,
