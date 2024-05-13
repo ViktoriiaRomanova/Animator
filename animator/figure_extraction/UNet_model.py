@@ -14,7 +14,7 @@ ARC: Dict[str, List[Union[str, int]]] = {
 
 
 class UNet(nn.Module):
-    """Make SegNet architecture."""
+    """Make UNet architecture."""
 
     def __init__(self, arc: str = 'B') -> None:
         """Create model."""
