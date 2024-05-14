@@ -56,7 +56,7 @@ class GetDataset(Dataset, _bp.BaseDataset):
         super().__init__(img_dir, data, transform, size, mean, std)
 
     def __getitem__(self, idx: int) -> Tensor:
-        """Return image/transformed image and it's mask by given index."""
+        """Return image/transformed image by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
         
         image = io.read_image(img_path)

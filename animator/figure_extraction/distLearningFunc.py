@@ -12,7 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from datetime import datetime
 
-from processingDataSet import MaskDataset
+from figure_extraction.processing_dataset import MaskDataset
 from SegNetModel import SegNet
 from UNetModel import UNet
 from tqdm import tqdm

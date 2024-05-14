@@ -14,7 +14,6 @@
 '''
 import argparse
 import os
-import sys
 from datetime import datetime
 from json import loads as jloads
 import time

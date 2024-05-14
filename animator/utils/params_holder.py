@@ -1,7 +1,7 @@
 import argparse
 import yaml
 
-from animator.utils.parameter_storages import TrainingParams
+from Animator.animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 class ParamsHolder:
     def __init__(self, additional: str) -> None:

@@ -9,7 +9,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from ..utils.parameter_storages import DistParams
+from ..utils.parameter_storages.transfer_parameters import DistParams
 
 
 class BaseDist(ABC):

@@ -14,7 +14,7 @@ from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from ..utils.buffer import ImageBuffer
 from .preprocessing_data import GetDataset
-from ..utils.parameter_storages import TrainingParams
+from ..utils.parameter_storages.transfer_parameters import TrainingParams
 
 __all__ = ['DistLearning']
 
