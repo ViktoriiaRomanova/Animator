@@ -5,7 +5,7 @@ from collections.abc import Callable
 import torch
 
 class BaseImgProcessing(ABC):
-    def __init__(self, transform: Callable[[np.array], np.array] | None = None) -> None:
+    def __init__(self, transform: Callable[[np.array], np.array] | None) -> None:
         self.transform = transform
 
     def _conv_to_img(self, img: torch.tensor) -> np.array:
@@ -13,7 +13,7 @@ class BaseImgProcessing(ABC):
         img = img.numpy().squeeze()
         if self.transform is not None:
             img = self.transform(img)
-        img = img.clip(0, 1)
+        img.clip(0, 1, out = img)
         return img
     
     @abstractmethod
