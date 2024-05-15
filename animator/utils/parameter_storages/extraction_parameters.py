@@ -46,6 +46,10 @@ class BaseLossParams:
 class LossParams:
     pass
 
+@dataclass
+class Metrics:
+    threshhold: float
+
 @nested_dataclass
 class ExtTrainingParams:
     main: MainParams    
@@ -54,3 +58,4 @@ class ExtTrainingParams:
     optimizers: OptimParams
     model: ModelParams
     loss: LossParams
+    metrics: Metrics

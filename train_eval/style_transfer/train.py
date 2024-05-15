@@ -1,7 +1,7 @@
 import torch.multiprocessing as mp
 
 from animator.style_transfer.preprocessing_data import PreprocessingData
-from animator.utils.params_holder import ParamsHolder
+from animator.utils.parameter_storages.params_holder import ParamsHolder
 from . import worker
 
 HYPERPARAMETERS = 'animator/train_eval/style_transfer/hyperparameters.yaml'

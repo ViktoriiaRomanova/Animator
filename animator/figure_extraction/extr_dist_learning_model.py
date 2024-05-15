@@ -1,25 +1,23 @@
 import os
 from json import dumps as jdumps
-from typing import Any, List, Optional, Tuple
 from argparse import Namespace
-import shutil
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
-from datetime import datetime
+from torchmetrics import JaccardIndex 
 
 from figure_extraction.processing_dataset import MaskDataset
-from SegNetModel import SegNet
-from UNet_model import UNet
+from segnet_model import SegNet
+from unet_model import UNet
 from tqdm import tqdm
 
 from figure_extraction.processing_dataset import MaskDataset
 from animator.base_distributed._distributed_model import BaseDist
 from ..utils.parameter_storages.extraction_parameters import ExtTrainingParams
+
 
 class ExtractionDistLearning(BaseDist):
     def __init__(self, rank, init_args: Namespace,
@@ -69,6 +67,8 @@ class ExtractionDistLearning(BaseDist):
                                       betas = params.optimizers.betas)
         
         self.loss = torch.compile(nn.BCEWithLogitsLoss())
+        self.metric = torch.compile(JaccardIndex('binary',
+                                                 threshold = params.metrics.threshhold))
         
         self.save_load_params = {'model': self.model,
                                  'optim': self.optim,
@@ -118,3 +118,80 @@ class ExtractionDistLearning(BaseDist):
                              persistent_workers = self.device.type != 'cpu',
                              pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
         return data_loader
+    
+    def forward(self, x_batch: torch.Tensor, y_batch: torch.Tensor) -> tuple[torch.tensor, torch.tensor]:
+        with torch.autocast(device_type = self.device.type,
+                            dtype = torch.float16,
+                            enabled = self.device.type == 'cuda'):
+            y_pred = self.model(x_batch)
+            loss = self.loss(y_pred, y_batch)
+            metric = self.metric(y_pred, y_batch)
+        return loss, metric
+
+    def backward(self, loss: torch.Tensor) -> None:
+        
+        self.model.zero_grad(True)
+
+        self.scaler(loss).backward()
+        self.scaler.step(self.optim)
+        self.scaler.update()        
+    
+    def execute(self,) -> None:
+
+        for epoch in range(self.start_epoch, self.epochs):
+            self.train_loader.sampler.set_epoch(epoch - self.start_epoch)
+            self.val_loader.sampler.set_epoch(epoch - self.start_epoch)
+
+            self.model.train()
+            train_loss, train_metric = 0, 0
+            for x_batch, y_batch in tqdm(self.train_loader):
+                x_batch = x_batch.to(self.device, non_blocking = True)
+                y_batch = y_batch.to(self.device, non_blocking = True)
+                loss, metric = self.forward(x_batch, y_batch)
+                self.backward(loss)
+
+                train_loss += (loss.detach() / len(self.train_loader))
+                # !it is not final result, to get real metric need to divide it into num_batches
+                train_metric += metric
+
+                del x_batch, y_batch, y_pred, loss
+            train_metric /= len(self.train_loader)
+
+            self.model.eval()
+            val_loss, val_metric = 0, 0
+            with torch.no_grad():
+                for x_batch, y_batch in tqdm(self.val_loader):
+                    x_batch = x_batch.to(self.device, non_blocking = True)
+                    y_batch = y_batch.to(self.device, non_blocking = True)
+                    loss, metric = self.forward(x_batch, y_batch)
+
+                    val_loss += (loss.detach() / len(self.val_loader))
+                    # !it is not final result, to get real metric need to divide it into num_batches
+                    val_metric += metric
+
+                del x_batch, y_batch, y_pred, loss
+            val_metric /= len(self.val_loader)
+
+            # Share metrics
+            metrics = torch.tensor([train_loss / self.world_size,
+                                    val_loss / self.world_size,
+                                    train_metric / self.world_size,
+                                    val_metric / self.world_size], device = self.device)
+            dist.all_reduce(metrics, op = dist.ReduceOp.SUM)
+
+            if self.rank == 0:
+                # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
+                json_metrics = jdumps({'train_loss' : metrics[0].item(),
+                                       'val_loss' : metrics[1].item(),
+                                       'train_metric' : metrics[2].item(),
+                                       'val_metric' : metrics[3].item(),
+                                       'epoch': epoch})
+                # Send metrics into stdout. This channel going to be transferred into initial machine. 
+                print(json_metrics)
+            
+                if (epoch + 1) % 1 == 0:                   
+                    torch.save(self.save_model(epoch), 
+                            os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
+        if self.rank == 0:           
+            self.make_archive(self.model_weights_dir, self.init_args.omodel)
+        dist.destroy_process_group()

@@ -24,3 +24,6 @@ optimizers:
 models:
   mtype: 'UNet' # UNet or SegNet
   marchitecture: 'B' # A, B, or C. Ditails in UNet_mode.py and SegNet_model.py 
+
+metrics:
+  threshhold: 0.0 # Threshold for Jaccardmetric
