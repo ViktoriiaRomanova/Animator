@@ -1,7 +1,7 @@
 from argparse import Namespace
 
 from animator.style_transfer.dist_learning_model import DistLearning
-from animator.utils.parameter_storages import TrainingParams
+from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 def worker(rank: int, args: Namespace, params: TrainingParams,
            train_data: list[list[str], list[str]],
