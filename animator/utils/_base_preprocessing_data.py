@@ -1,4 +1,3 @@
-import os
 from abc import ABC, abstractmethod
 
 from torchvision import transforms
@@ -54,6 +53,6 @@ class BaseDataset(ABC):
         return len(self.imgnames)
 
     @abstractmethod
-    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
-        """Return image/transformed image and it's mask by given index."""
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor] | Tensor:
+        """Return image/transformed image by given index."""
         pass

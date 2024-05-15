@@ -1,16 +1,11 @@
 import os
 from typing import Callable
 
-import torch.nn as nn
-from torch import Tensor
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset
-from torchvision import transforms
-from torchvision import io
 
 from ..utils import _base_preprocessing_data as _bp
 
-__all__ = ['PreprocessingData', 'GetDataset']
+__all__ = ['PreprocessingData']
 
 class PreprocessingData(_bp.BasePreprocessingData):
     """Collect file names, split into train and test."""
@@ -37,29 +32,3 @@ class PreprocessingData(_bp.BasePreprocessingData):
                                        shuffle = False, random_state = random_state)
         train_len, test_len = int(part * len(train_img)), int(part * len(test_img))
         return train_img[:train_len], test_img[:test_len]
-
-
-class GetDataset(Dataset, _bp.BaseDataset):
-    """Prepare data for DataLoader."""
-
-    def __init__(self, img_dir: str, data: list[str],
-                 transform: nn.Module | transforms.Compose | None = None,
-                 size: list[int, int] = [224, 224],
-                 mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
-                 std: tuple[float, float, float] = (0.229, 0.224, 0.225)) -> None:
-        """
-            Args:
-                * dataset directory,
-                * list of filenames,
-                * picture transformation.
-        """
-        super().__init__(img_dir, data, transform, size, mean, std)
-
-    def __getitem__(self, idx: int) -> Tensor:
-        """Return image/transformed image by given index."""
-        img_path = os.path.join(self.img_dir, self.imgnames[idx])
-        
-        image = io.read_image(img_path)
-        image = self.norm(self.to_resized_tensor(image).div(255))
-
-        return image if self.transforms is None else self.transforms(image)

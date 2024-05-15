@@ -9,12 +9,11 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from torchmetrics import JaccardIndex 
 
-from figure_extraction.processing_dataset import MaskDataset
+from figure_extraction.get_dataset import MaskDataset
 from segnet_model import SegNet
 from unet_model import UNet
 from tqdm import tqdm
 
-from figure_extraction.processing_dataset import MaskDataset
 from animator.base_distributed._distributed_model import BaseDist
 from ..utils.parameter_storages.extraction_parameters import ExtTrainingParams
 
@@ -37,8 +36,16 @@ class ExtractionDistLearning(BaseDist):
             transforms.RandomVerticalFlip(p = 0.1),
             transforms.RandomPerspective(p = 0.1)])
 
-        train_set = MaskDataset(init_args.dataset, train_data, transform)
-        val_set = MaskDataset(init_args.dataset, val_data, transform)
+        train_set = MaskDataset(init_args.dataset, train_data,
+                                size = params.data.size,
+                                mean = params.data.mean,
+                                std = params.data.std,
+                                transform = transform)
+        val_set = MaskDataset(init_args.dataset, val_data,
+                              size = params.data.size,
+                              mean = params.data.mean,
+                              std = params.data.std,
+                              transform = transform)
 
         self.train_loader = self.prepare_dataloader(train_set, rank,
                                                self.world_size,
@@ -183,8 +190,8 @@ class ExtractionDistLearning(BaseDist):
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
                 json_metrics = jdumps({'train_loss' : metrics[0].item(),
                                        'val_loss' : metrics[1].item(),
-                                       'train_metric' : metrics[2].item(),
-                                       'val_metric' : metrics[3].item(),
+                                       'train_IoU' : metrics[2].item(),
+                                       'val_IoU' : metrics[3].item(),
                                        'epoch': epoch})
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)

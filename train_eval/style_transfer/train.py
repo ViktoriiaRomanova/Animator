@@ -1,6 +1,6 @@
 import torch.multiprocessing as mp
 
-from animator.style_transfer.preprocessing_data import PreprocessingData
+from animator.utils.preprocessing_data import PreprocessingData
 from animator.utils.parameter_storages.params_holder import ParamsHolder
 from . import worker
 

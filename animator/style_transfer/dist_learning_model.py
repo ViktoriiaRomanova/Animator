@@ -13,7 +13,7 @@ from animator.base_distributed._distributed_model import BaseDist
 from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from ..utils.buffer import ImageBuffer
-from .preprocessing_data import GetDataset
+from .get_dataset import GetDataset
 from ..utils.parameter_storages.transfer_parameters import TrainingParams
 
 __all__ = ['DistLearning']

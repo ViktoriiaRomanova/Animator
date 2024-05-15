@@ -1,6 +1,6 @@
 from argparse import Namespace
 
-from animator.figure_extraction.extr_dist_learning_model import ExtractionDistLearning
+from animator.figure_extraction.dist_learning_model import ExtractionDistLearning
 from animator.utils.parameter_storages.extraction_parameters import ExtTrainingParams
 
 def worker(rank: int, args: Namespace, params: ExtTrainingParams,
