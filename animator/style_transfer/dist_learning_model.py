@@ -238,6 +238,12 @@ class DistLearning(BaseDist):
 
             if self.rank == 0:
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
+                json_metrics = jdumps({'Loss': 
+                                            {'gens' : metrics[0].item(),
+                                            'disc_A' : metrics[1].item(),
+                                            'disc_B' : metrics[2].item()},
+                                       'epoch': epoch})
+                
                 json_metrics = jdumps({'gens_loss' : metrics[0].item(),
                                        'disc_A_loss' : metrics[1].item(),
                                        'disc_B_loss' : metrics[2].item(),

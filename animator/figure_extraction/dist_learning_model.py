@@ -188,10 +188,14 @@ class ExtractionDistLearning(BaseDist):
 
             if self.rank == 0:
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
-                json_metrics = jdumps({'train_loss' : metrics[0].item(),
-                                       'val_loss' : metrics[1].item(),
-                                       'train_IoU' : metrics[2].item(),
-                                       'val_IoU' : metrics[3].item(),
+                json_metrics = jdumps({'Loss': 
+                                            {'train' : metrics[0].item(),
+                                             'val' : metrics[1].item()
+                                            },
+                                        'IoU':
+                                            {'train' : metrics[2].item(),
+                                             'val' : metrics[3].item()
+                                            },
                                        'epoch': epoch})
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
