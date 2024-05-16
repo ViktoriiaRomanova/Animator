@@ -11,12 +11,10 @@ import torch.multiprocessing as mp
 import torch
 
 from animator.style_transfer.dist_learning_model import DistLearning
-from animator.utils.parameter_storages import TrainingParams
-from animator.style_transfer.preprocessing_data import PreprocessingData
-
-DATA_PATH = 'tests/style_transfer/test_img'
-MODEL_CHECKPOINTS = 'tests/style_transfer/checkpoints/train_checkpoints.zip'
-HYPERPARAMETERS = 'animator/train_eval/style_transfer/hyperparameters.yaml'
+from animator.utils.parameter_storages.transfer_parameters import TrainingParams
+from animator.utils.preprocessing_data import PreprocessingData
+from tests import HYPERPARAMETERS
+from tests.style_transfer import DATA_PATH, MODEL_CHECKPOINTS
 
 SLEEP_TIME_DATA_LOADING = 10
 SLEEP_TIME_MODEL_EXE = 100

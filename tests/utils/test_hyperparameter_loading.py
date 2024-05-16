@@ -2,7 +2,7 @@ import unittest
 import yaml
 from dataclasses import asdict
 
-from animator.utils.parameter_storages import TrainingParams
+from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 def dict_factory(args) -> dict:
     res = {}
@@ -15,7 +15,7 @@ def dict_factory(args) -> dict:
 
 class ParameterLoadingTests(unittest.TestCase):
     def test_load_train_param_correct(self):
-        path = 'animator/train_eval/style_transfer/hyperparameters.yaml'
+        path = 'train_eval/style_transfer/hyperparameters.yaml'
         with open(path, 'r') as file:
             params = yaml.safe_load(file)
         
