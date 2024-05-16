@@ -9,9 +9,9 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from torchmetrics import JaccardIndex 
 
-from figure_extraction.get_dataset import MaskDataset
-from segnet_model import SegNet
-from unet_model import UNet
+from .get_dataset import MaskDataset
+from .segnet_model import SegNet
+from .unet_model import UNet
 from tqdm import tqdm
 
 from animator.base_distributed._distributed_model import BaseDist

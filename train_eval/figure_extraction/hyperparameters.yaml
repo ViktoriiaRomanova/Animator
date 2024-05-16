@@ -1,6 +1,6 @@
 main: 
   random_state: 10
-  batch_size: 1
+  batch_size: 64
   epochs: 2
 
 data:
@@ -21,7 +21,7 @@ optimizers:
   lr: 0.001
   betas: [0.9, 0.999]    
 
-models:
+model:
   mtype: 'UNet' # UNet or SegNet
   marchitecture: 'B' # A, B, or C. Ditails in UNet_mode.py and SegNet_model.py 
 

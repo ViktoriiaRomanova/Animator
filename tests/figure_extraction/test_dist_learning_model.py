@@ -10,15 +10,15 @@ import pickle
 import torch.multiprocessing as mp
 import torch
 
-from animator.style_transfer.dist_learning_model import DistLearning
+from animator.figure_extraction.dist_learning_model import ExtractionDistLearning
 from animator.utils.parameter_storages.params_holder import ParamsHolder
-from animator.utils.parameter_storages.transfer_parameters import TrainingParams
+from animator.utils.parameter_storages.extraction_parameters import ExtTrainingParams
 from animator.utils.preprocessing_data import PreprocessingData
-from tests import HYPERPARAMETERS
-from tests.style_transfer import DATA_PATH, MODEL_CHECKPOINTS
+from animator.figure_extraction.get_dataset import checker
+from tests.figure_extraction import DATA_PATH, MODEL_CHECKPOINTS, HYPERPARAMETERS
 
-SLEEP_TIME_DATA_LOADING = 10
-SLEEP_TIME_MODEL_EXE = 100
+SLEEP_TIME_DATA_LOADING = 5
+SLEEP_TIME_MODEL_EXE = 30
 
 def setUpModule() -> None:
     multiprocessing.set_start_method('spawn')
@@ -32,29 +32,29 @@ def tearDownModule() -> None:
         shutil.rmtree(os.path.dirname(MODEL_CHECKPOINTS))
 
 
-def worker_init(rank: int, args: Namespace, params: TrainingParams,
+def worker_init(rank: int, args: Namespace, params: ExtTrainingParams,
+                   train_data: list[str],
+                   val_data: list[str] | None) -> None:
+
+            torch.set_num_threads(1)
+            _ = ExtractionDistLearning(rank, args, params, train_data, val_data)
+
+def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: ExtractionDistLearning,
                    train_data: list[list[str], list[str]],
                    val_data: list[list[str], list[str]] | None) -> None:
 
             torch.set_num_threads(1)
-            _ = DistLearning(rank, args, params, train_data, val_data)
-
-def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: TrainingParams,
-                   train_data: list[list[str], list[str]],
-                   val_data: list[list[str], list[str]] | None) -> None:
-
-            torch.set_num_threads(1)
-            dist_process = DistLearning(rank, args, params, train_data, val_data)
+            dist_process = ExtractionDistLearning(rank, args, params, train_data, val_data)
             state = pickle.dumps(dist_process.save_model(max(0, dist_process.start_epoch - 1)))
             conn_queue.put(state)
             dist_process.execute()
 
-def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: TrainingParams,
+def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: ExtTrainingParams,
                    train_data: list[list[str], list[str]],
                    val_data: list[list[str], list[str]] | None) -> None:
 
             torch.set_num_threads(1)
-            dist_process = DistLearning(rank, args, params, train_data, val_data)
+            dist_process = ExtractionDistLearning(rank, args, params, train_data, val_data)
 
             conn_queue.put({sample for sample in dist_process.train_loaderX.sampler})
 
@@ -73,31 +73,25 @@ class MainTrainingPipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
 
-        cls.base_param = Namespace(datasetX = DATA_PATH,
-                                   datasetY = DATA_PATH,
+        cls.base_param = Namespace(dataset = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
         with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file))
+            cls.params = ParamsHolder(**yaml.safe_load(file), 'Extraction')
 
         # Change default params for test purposes
         cls.params.main.epochs = 1
-        cls.params.main.buffer_size = 2
+        cls.params.main.batch_size = 1
         # local tests on CPU
         cls.params.distributed.backend = 'gloo'
 
         cls.params.data.data_part = 0.5
         cls.params.data.sub_part_data = 0.4
 
-        pr_data = PreprocessingData(cls.params.data.data_part)
-        train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
+        pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
+        cls.train_data, cls.val_data = pr_data.get_data(cls.base_param.dataset,
                                                 cls.params.main.random_state,
                                                 cls.params.data.data_part)
         
-        train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
-                                                cls.params.main.random_state,
-                                                cls.params.data.data_part)
-        cls.train_data = [train_dataX, train_dataY]
-        cls.val_data = [val_dataX, val_dataY]
     
     @classmethod
     def tearDownClass(cls) -> None:
@@ -108,7 +102,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         if os.path.exists(MODEL_CHECKPOINTS):
             os.remove(MODEL_CHECKPOINTS)
 
-    def test_DistLearning_init_setup(self,) -> None:     
+    def test_ExtractionDistLearning_init_setup(self,) -> None:     
         context = mp.spawn(worker_init, args = (self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
@@ -116,7 +110,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         time.sleep(5)
         self.assertTrue(context.join())
 
-    def test_DistLearning_run_init_save_model(self,) -> None: 
+    def test_ExtractionDistLearning_init_save_model(self,) -> None: 
         conn_queue = multiprocessing.Queue()
     
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
@@ -137,7 +131,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
-        self.base_param.imodel = 'tests/style_transfer/test_weights/0.pt'
+        self.base_param.imodel = 'tests/figure_extraction/test_weights/0.pt'
 
         conn_queue = multiprocessing.Queue()
 
@@ -163,31 +157,25 @@ class DistSamplerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
        
-        cls.base_param = Namespace(datasetX = DATA_PATH,
-                                   datasetY = DATA_PATH,
+        cls.base_param = Namespace(dataset = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
         with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file))
+            cls.params = ParamsHolder(**yaml.safe_load(file), 'Extraction')
 
         
         # Change default params for test purposes
         cls.params.main.epochs = 1
-        cls.params.main.buffer_size = 2
+        cls.params.main.batch_size = 1
         # local tests on CPU
         cls.params.distributed.backend = 'gloo'
-        cls.params.data.data_part = 0.9
+        cls.params.data.data_part = 0.8
         cls.params.data.sub_part_data = 1.0
 
-        pr_data = PreprocessingData(cls.params.data.data_part)
-        train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
+        pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
+        cls.train_data, cls.val_data = pr_data.get_data(cls.base_param.dataset,
                                                 cls.params.main.random_state,
                                                 cls.params.data.data_part)
         
-        train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
-                                                cls.params.main.random_state,
-                                                cls.params.data.data_part)
-        cls.train_data = [train_dataX, train_dataY]
-        cls.val_data = [val_dataX, val_dataY]
     
     @classmethod
     def tearDownClass(cls) -> None:
@@ -203,7 +191,7 @@ class DistSamplerTests(unittest.TestCase):
         samples_0 = conn_queue.get()
         samples_1 = conn_queue.get()
 
-        is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data[0]) // 2) \
+        is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data) // 2) \
                    and (len(samples_0 & samples_1) == 0)
 
         self.assertTrue(context.join() and is_not_intersect)

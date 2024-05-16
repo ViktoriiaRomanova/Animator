@@ -1,4 +1,5 @@
 import os
+import re
 
 import torch
 import torch.nn as nn
@@ -45,6 +46,9 @@ class MaskDataset(Dataset, _bp.BaseDataset):
             both = self.transforms(both)
             image, mask = torch.tensor_split(both, [3], dim = 0)
         return image, mask
+
+def checker(name_: str) -> bool:
+        return name_.endswith('.jpg') and re.match('\d_+\d', name_) is not None 
 
 
 def get_not_RGB_pic(data: MaskDataset) -> set[int]:

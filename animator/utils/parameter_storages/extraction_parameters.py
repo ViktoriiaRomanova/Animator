@@ -57,5 +57,4 @@ class ExtTrainingParams:
     distributed: DistParams
     optimizers: OptimParams
     model: ModelParams
-    loss: LossParams
     metrics: Metrics
