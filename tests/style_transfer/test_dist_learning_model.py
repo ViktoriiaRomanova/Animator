@@ -76,8 +76,8 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
-        with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file))
+
+        cls.params = ParamsHolder(HYPERPARAMETERS)
 
         # Change default params for test purposes
         cls.params.main.epochs = 1
@@ -166,8 +166,8 @@ class DistSamplerTests(unittest.TestCase):
         cls.base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
-        with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file))
+
+        cls.params = ParamsHolder(HYPERPARAMETERS)
 
         
         # Change default params for test purposes

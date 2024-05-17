@@ -17,7 +17,7 @@ class BaseParamsHolder(ABC):
 
 class ParamsHolder(BaseParamsHolder):
     def __init__(self, additional: str, ptype: str = 'Transfer') -> None:
-        super().__int__()
+        super().__init__()
         with open(additional, 'r') as file:
             if ptype == 'Transfer':
                 self.hyper_params = TrainingParams(**yaml.safe_load(file))

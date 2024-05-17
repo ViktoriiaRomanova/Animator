@@ -144,6 +144,7 @@ class ExtractionDistLearning(BaseDist):
         self.scaler.update()        
     
     def execute(self,) -> None:
+        print('exec')
 
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loader.sampler.set_epoch(epoch - self.start_epoch)

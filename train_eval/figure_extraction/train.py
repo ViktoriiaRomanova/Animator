@@ -1,5 +1,4 @@
-import re
-
+import os
 import torch.multiprocessing as mp
 
 from animator.utils.preprocessing_data import PreprocessingData
@@ -15,7 +14,7 @@ if __name__ == '__main__':
     base_param, params = params_holder.datasphere_params, params_holder.hyper_params          
 
     pr_data = PreprocessingData(params.data.data_part, checker = checker)
-    train_data, val_data = pr_data.get_data(base_param.dataset,
+    train_data, val_data = pr_data.get_data(os.path.join(base_param.dataset, 'input'),
                                               params.main.random_state,
                                               params.data.data_part)        
 

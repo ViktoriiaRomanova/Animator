@@ -1,6 +1,5 @@
 import unittest
 from argparse import Namespace
-import yaml
 import os
 import time
 import shutil
@@ -28,8 +27,12 @@ def setUpModule() -> None:
         os.makedirs(dir)
 
 def tearDownModule() -> None:
-        shutil.rmtree('./train_checkpoints')
-        shutil.rmtree(os.path.dirname(MODEL_CHECKPOINTS))
+    dir = './train_checkpoints'
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
+    dir = os.path.dirname(MODEL_CHECKPOINTS)
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
 
 
 def worker_init(rank: int, args: Namespace, params: ExtTrainingParams,
@@ -73,10 +76,14 @@ class MainTrainingPipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
 
-        cls.base_param = Namespace(dataset = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS, imodel = None)
-        with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file), 'Extraction')
+        base_param = Namespace(dataset = DATA_PATH,
+                               omodel = MODEL_CHECKPOINTS, imodel = None)
+
+        with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
+            cls.holder = ParamsHolder(HYPERPARAMETERS, 'Extraction')
+        
+        cls.params = cls.holder.hyper_params
+        cls.base_param = cls.holder.datasphere_params
 
         # Change default params for test purposes
         cls.params.main.epochs = 1
@@ -88,7 +95,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.data.sub_part_data = 0.4
 
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
-        cls.train_data, cls.val_data = pr_data.get_data(cls.base_param.dataset,
+        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
                                                 cls.params.main.random_state,
                                                 cls.params.data.data_part)
         
@@ -139,7 +146,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
                            join = False, nprocs = self.params.distributed.world_size)
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
-        init_state = torch.load(self.base_param.imodel)
+        init_state = torch.load(self.base_param.imodel, map_location = torch.device('cpu'))
         is_equal = True
         while conn_queue.qsize() > 0:
               state = pickle.loads(conn_queue.get())
@@ -157,11 +164,14 @@ class DistSamplerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
        
-        cls.base_param = Namespace(dataset = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS, imodel = None)
-        with open(HYPERPARAMETERS, 'r') as file:
-            cls.params = ParamsHolder(**yaml.safe_load(file), 'Extraction')
+        base_param = Namespace(dataset = DATA_PATH,
+                               omodel = MODEL_CHECKPOINTS, imodel = None)
 
+        with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
+            cls.holder = ParamsHolder(HYPERPARAMETERS, 'Extraction')
+        
+        cls.params = cls.holder.hyper_params
+        cls.base_param = cls.holder.datasphere_params
         
         # Change default params for test purposes
         cls.params.main.epochs = 1
@@ -172,7 +182,7 @@ class DistSamplerTests(unittest.TestCase):
         cls.params.data.sub_part_data = 1.0
 
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
-        cls.train_data, cls.val_data = pr_data.get_data(cls.base_param.dataset,
+        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
                                                 cls.params.main.random_state,
                                                 cls.params.data.data_part)
         

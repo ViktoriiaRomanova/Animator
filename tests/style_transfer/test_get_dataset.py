@@ -13,7 +13,7 @@ from animator.style_transfer.get_dataset import GetDataset
 from tests import IMG_PATH
 
 
-class GetDataseTests(unittest.TestCase):
+class GetDatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.img_shape = (3, 224, 224)
