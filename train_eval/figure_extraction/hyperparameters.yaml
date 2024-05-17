@@ -26,4 +26,4 @@ model:
   marchitecture: 'B' # A, B, or C. Ditails in unet_mode.py and segnet_model.py 
 
 metrics:
-  threshhold: 0.0 # Threshold for Jaccardmetric
+  threshhold: 0.1 # Threshold for Jaccardmetric

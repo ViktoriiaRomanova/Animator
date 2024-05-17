@@ -59,7 +59,7 @@ def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace
             torch.set_num_threads(1)
             dist_process = ExtractionDistLearning(rank, args, params, train_data, val_data)
 
-            conn_queue.put({sample for sample in dist_process.train_loaderX.sampler})
+            conn_queue.put({sample for sample in dist_process.train_loader.sampler})
 
 
 def compare_states(state1: dict, state2: dict) -> bool:
@@ -94,10 +94,13 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.data.data_part = 0.5
         cls.params.data.sub_part_data = 0.4
 
+        cls.params.model.mtype = 'UNet'
+        cls.params.model.marchitecture = 'C'
+
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
         cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         
     
     @classmethod
@@ -181,10 +184,13 @@ class DistSamplerTests(unittest.TestCase):
         cls.params.data.data_part = 0.8
         cls.params.data.sub_part_data = 1.0
 
+        cls.params.model.mtype = 'UNet'
+        cls.params.model.marchitecture = 'C'
+
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
         cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         
     
     @classmethod

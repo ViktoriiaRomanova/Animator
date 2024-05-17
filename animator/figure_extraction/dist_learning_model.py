@@ -93,14 +93,21 @@ class ExtractionDistLearning(BaseDist):
         state = torch.load(weights_dir, map_location = device)
 
         for key, param in self.save_load_params.items():
-            param.load_state_dict(state[key])
+            if isinstance(param, nn.Module):
+                param.module.load_state_dict(state[key])
+            else:
+                param.load_state_dict(state[key])
 
         return state['epoch'] + 1
 
     def save_model(self, epoch: int) -> dict:
         state = {}
         for key, param in self.save_load_params.items():
-            state[key] = param.state_dict()
+            if isinstance(param, nn.Module):
+                state[key] = param.module.state_dict()
+            else:
+                state[key] = param.state_dict()
+
         state['epoch'] = epoch
         return state
 
@@ -132,19 +139,18 @@ class ExtractionDistLearning(BaseDist):
                             enabled = self.device.type == 'cuda'):
             y_pred = self.model(x_batch)
             loss = self.loss(y_pred, y_batch)
-            metric = self.metric(y_pred, y_batch)
+            metric = self.metric(y_pred, y_batch.byte())
         return loss, metric
 
     def backward(self, loss: torch.Tensor) -> None:
         
         self.model.zero_grad(True)
 
-        self.scaler(loss).backward()
+        self.scaler.scale(loss).backward()
         self.scaler.step(self.optim)
         self.scaler.update()        
     
     def execute(self,) -> None:
-        print('exec')
 
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loader.sampler.set_epoch(epoch - self.start_epoch)
@@ -162,7 +168,7 @@ class ExtractionDistLearning(BaseDist):
                 # !it is not final result, to get real metric need to divide it into num_batches
                 train_metric += metric
 
-                del x_batch, y_batch, y_pred, loss
+                del x_batch, y_batch, loss
             train_metric /= len(self.train_loader)
 
             self.model.eval()
@@ -177,7 +183,7 @@ class ExtractionDistLearning(BaseDist):
                     # !it is not final result, to get real metric need to divide it into num_batches
                     val_metric += metric
 
-                del x_batch, y_batch, y_pred, loss
+                del x_batch, y_batch, loss
             val_metric /= len(self.val_loader)
 
             # Share metrics

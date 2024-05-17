@@ -91,11 +91,11 @@ class MainTrainingPipelineTests(unittest.TestCase):
         pr_data = PreprocessingData(cls.params.data.data_part)
         train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         
         train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         cls.train_data = [train_dataX, train_dataY]
         cls.val_data = [val_dataX, val_dataY]
     
@@ -181,11 +181,11 @@ class DistSamplerTests(unittest.TestCase):
         pr_data = PreprocessingData(cls.params.data.data_part)
         train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         
         train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
                                                 cls.params.main.random_state,
-                                                cls.params.data.data_part)
+                                                cls.params.data.sub_part_data)
         cls.train_data = [train_dataX, train_dataY]
         cls.val_data = [val_dataX, val_dataY]
     
