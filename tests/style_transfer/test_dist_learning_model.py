@@ -14,14 +14,14 @@ from animator.style_transfer.dist_learning_model import DistLearning
 from animator.utils.parameter_storages.params_holder import ParamsHolder
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 from animator.utils.preprocessing_data import PreprocessingData
-from tests import HYPERPARAMETERS
-from tests.style_transfer import DATA_PATH, MODEL_CHECKPOINTS
+from tests import DATA_PATH, HYPERPARAMETERS
+from tests.style_transfer import MODEL_CHECKPOINTS
 
 SLEEP_TIME_DATA_LOADING = 10
 SLEEP_TIME_MODEL_EXE = 100
 
 def setUpModule() -> None:
-    multiprocessing.set_start_method('spawn')
+    mp.set_start_method('spawn')
 
     dir = os.path.dirname(MODEL_CHECKPOINTS)
     if not os.path.exists(dir):
@@ -44,10 +44,12 @@ def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params
                    val_data: list[list[str], list[str]] | None) -> None:
 
             torch.set_num_threads(1)
+
             dist_process = DistLearning(rank, args, params, train_data, val_data)
             state = pickle.dumps(dist_process.save_model(max(0, dist_process.start_epoch - 1)))
             conn_queue.put(state)
             dist_process.execute()
+
 
 def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: TrainingParams,
                    train_data: list[list[str], list[str]],
@@ -55,7 +57,6 @@ def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace
 
             torch.set_num_threads(1)
             dist_process = DistLearning(rank, args, params, train_data, val_data)
-
             conn_queue.put({sample for sample in dist_process.train_loaderX.sampler})
 
 
@@ -73,11 +74,15 @@ class MainTrainingPipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
 
-        cls.base_param = Namespace(datasetX = DATA_PATH,
+        base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
+        
+        with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
+            cls.holder = ParamsHolder(HYPERPARAMETERS)
 
-        cls.params = ParamsHolder(HYPERPARAMETERS)
+        cls.params = cls.holder.hyper_params
+        cls.base_param = cls.holder.datasphere_params
 
         # Change default params for test purposes
         cls.params.main.epochs = 1
@@ -108,7 +113,8 @@ class MainTrainingPipelineTests(unittest.TestCase):
         if os.path.exists(MODEL_CHECKPOINTS):
             os.remove(MODEL_CHECKPOINTS)
 
-    def test_DistLearning_init_setup(self,) -> None:     
+    def test_DistLearning_init_setup(self,) -> None:
+        print('test1')   
         context = mp.spawn(worker_init, args = (self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
@@ -116,17 +122,18 @@ class MainTrainingPipelineTests(unittest.TestCase):
         time.sleep(5)
         self.assertTrue(context.join())
 
-    def test_DistLearning_run_init_save_model(self,) -> None: 
-        conn_queue = multiprocessing.Queue()
+    def test_DistLearning_run_init_save_model(self,) -> None:
+        print('test2')  
+        conn_queue = mp.Queue()
     
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
-        is_equal = True
-        state = pickle.loads(conn_queue.get())
-        while conn_queue.qsize() > 0:
-              is_equal &= compare_states(state, pickle.loads(conn_queue.get()))
+        is_equal = False
+        if conn_queue.qsize() > 1:
+            state = pickle.loads(conn_queue.get())
+            is_equal = compare_states(state, pickle.loads(conn_queue.get()))
 
         time.sleep(SLEEP_TIME_MODEL_EXE)
 
@@ -137,15 +144,19 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
+        print('test3')  
         self.base_param.imodel = 'tests/style_transfer/test_weights/0.pt'
 
-        conn_queue = multiprocessing.Queue()
+        conn_queue = mp.Queue()
 
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
         init_state = torch.load(self.base_param.imodel)
+        # Erase the scaler state as it is not going to be loaded while the scaler is disabled
+        # (this test works on CPU)
+        init_state['scaler'] = {}
         is_equal = True
         while conn_queue.qsize() > 0:
               state = pickle.loads(conn_queue.get())
@@ -163,12 +174,15 @@ class DistSamplerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
        
-        cls.base_param = Namespace(datasetX = DATA_PATH,
+        base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
                                    omodel = MODEL_CHECKPOINTS, imodel = None)
 
-        cls.params = ParamsHolder(HYPERPARAMETERS)
-
+        with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
+            cls.holder = ParamsHolder(HYPERPARAMETERS)
+        
+        cls.params = cls.holder.hyper_params
+        cls.base_param = cls.holder.datasphere_params
         
         # Change default params for test purposes
         cls.params.main.epochs = 1
@@ -194,7 +208,8 @@ class DistSamplerTests(unittest.TestCase):
         del cls.train_data, cls.val_data, cls.params, cls.base_param
     
     def test_DistLearning_sampler(self,) -> None:
-        conn_queue = multiprocessing.Queue()
+        print('test4')  
+        conn_queue = mp.Queue()
     
         context = mp.spawn(worker_sampler, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)

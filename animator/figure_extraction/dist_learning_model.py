@@ -94,9 +94,13 @@ class ExtractionDistLearning(BaseDist):
 
         for key, param in self.save_load_params.items():
             if isinstance(param, nn.Module):
-                param.module.load_state_dict(state[key])
+                if any(sub_key.find('module.') != -1 for sub_key in state[key]):
+                    param.load_state_dict(state[key])
+                else:
+                    param.module.load_state_dict(state[key])
             else:
                 param.load_state_dict(state[key])
+
 
         return state['epoch'] + 1
 
