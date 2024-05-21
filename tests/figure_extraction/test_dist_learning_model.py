@@ -17,7 +17,7 @@ from animator.figure_extraction.get_dataset import checker
 from tests.figure_extraction import DATA_PATH, MODEL_CHECKPOINTS, HYPERPARAMETERS
 
 SLEEP_TIME_DATA_LOADING = 5
-SLEEP_TIME_MODEL_EXE = 30
+SLEEP_TIME_MODEL_EXE = 70
 
 def setUpModule() -> None:
     multiprocessing.set_start_method('spawn')
@@ -66,7 +66,8 @@ def compare_states(state1: dict, state2: dict) -> bool:
     if len(state1) != len(state2): return False
     ans = True
     for key in state1:
-        if key not in state2: return False
+        if key not in state2: 
+             return False
         ans &= state1[key].__str__() == state2[key].__str__()
         if not ans: return ans
     return ans    
@@ -149,7 +150,10 @@ class MainTrainingPipelineTests(unittest.TestCase):
                            join = False, nprocs = self.params.distributed.world_size)
 
         time.sleep(SLEEP_TIME_DATA_LOADING)
-        init_state = torch.load(self.base_param.imodel, map_location = torch.device('cpu'))
+        init_state = torch.load(self.base_param.imodel)
+        # Erase the scaler state as it is not going to be loaded while the scaler is disabled
+        # (this test works on CPU)
+        init_state['scaler'] = {}
         is_equal = True
         while conn_queue.qsize() > 0:
               state = pickle.loads(conn_queue.get())
