@@ -3,7 +3,6 @@ from argparse import Namespace
 import os
 import time
 import shutil
-import multiprocessing
 import pickle
 
 import torch.multiprocessing as mp
@@ -16,11 +15,11 @@ from animator.utils.preprocessing_data import PreprocessingData
 from animator.figure_extraction.get_dataset import checker
 from tests.figure_extraction import DATA_PATH, MODEL_CHECKPOINTS, HYPERPARAMETERS
 
-SLEEP_TIME_DATA_LOADING = 5
-SLEEP_TIME_MODEL_EXE = 70
+TIME_DATA_LOADING = 5
+TIME_MODEL_EXEC = 70
 
 def setUpModule() -> None:
-    multiprocessing.set_start_method('spawn')
+    mp.set_start_method('spawn', force = True)
 
     dir = os.path.dirname(MODEL_CHECKPOINTS)
     if not os.path.exists(dir):
@@ -42,7 +41,7 @@ def worker_init(rank: int, args: Namespace, params: ExtTrainingParams,
             torch.set_num_threads(1)
             _ = ExtractionDistLearning(rank, args, params, train_data, val_data)
 
-def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: ExtractionDistLearning,
+def worker(rank: int, conn_queue: mp.Queue, args: Namespace, params: ExtractionDistLearning,
                    train_data: list[list[str], list[str]],
                    val_data: list[list[str], list[str]] | None) -> None:
 
@@ -52,7 +51,7 @@ def worker(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params
             conn_queue.put(state)
             dist_process.execute()
 
-def worker_sampler(rank: int, conn_queue: multiprocessing.Queue, args: Namespace, params: ExtTrainingParams,
+def worker_sampler(rank: int, conn_queue: mp.Queue, args: Namespace, params: ExtTrainingParams,
                    train_data: list[list[str], list[str]],
                    val_data: list[list[str], list[str]] | None) -> None:
 
@@ -95,6 +94,9 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.data.data_part = 0.5
         cls.params.data.sub_part_data = 0.4
 
+        # test for two distributed process
+        cls.params.distributed.world_size = 2
+
         cls.params.model.mtype = 'UNet'
         cls.params.model.marchitecture = 'C'
 
@@ -122,21 +124,18 @@ class MainTrainingPipelineTests(unittest.TestCase):
         self.assertTrue(context.join())
 
     def test_ExtractionDistLearning_init_save_model(self,) -> None: 
-        conn_queue = multiprocessing.Queue()
+        conn_queue = mp.Queue()
     
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        time.sleep(SLEEP_TIME_DATA_LOADING)
-        is_equal = True
-        state = pickle.loads(conn_queue.get())
-        while conn_queue.qsize() > 0:
-              is_equal &= compare_states(state, pickle.loads(conn_queue.get()))
+        state = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
+        is_equal = compare_states(state, pickle.loads(conn_queue.get(TIME_DATA_LOADING)))
 
-        time.sleep(SLEEP_TIME_MODEL_EXE)
+        while not context.join(TIME_MODEL_EXEC):
+             pass
 
-        self.assertTrue(context.join() and
-                        is_equal and
+        self.assertTrue(is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
         del state
 
@@ -144,27 +143,24 @@ class MainTrainingPipelineTests(unittest.TestCase):
     def test_DistLearning_load_save_model(self,) -> None:
         self.base_param.imodel = 'tests/figure_extraction/test_weights/0.pt'
 
-        conn_queue = multiprocessing.Queue()
+        conn_queue = mp.Queue()
 
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        time.sleep(SLEEP_TIME_DATA_LOADING)
         init_state = torch.load(self.base_param.imodel)
         # Erase the scaler state as it is not going to be loaded while the scaler is disabled
         # (this test works on CPU)
         init_state['scaler'] = {}
-        is_equal = True
-        while conn_queue.qsize() > 0:
-              state = pickle.loads(conn_queue.get())
-              is_equal &= compare_states(state, init_state)
-
-        time.sleep(SLEEP_TIME_MODEL_EXE)
-
-        self.assertTrue(context.join() and
-                        is_equal and
+        state1 = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
+        state2 = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
+        is_equal = compare_states(state1, init_state) & compare_states(state2, init_state)
+        while not context.join(TIME_MODEL_EXEC):
+             pass
+        
+        self.assertTrue(is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
-        del state, init_state
+        del state1, state2, init_state
 
 
 class DistSamplerTests(unittest.TestCase):
@@ -188,6 +184,9 @@ class DistSamplerTests(unittest.TestCase):
         cls.params.data.data_part = 0.8
         cls.params.data.sub_part_data = 1.0
 
+        # test for two distributed process
+        cls.params.distributed.world_size = 2
+
         cls.params.model.mtype = 'UNet'
         cls.params.model.marchitecture = 'C'
 
@@ -202,16 +201,17 @@ class DistSamplerTests(unittest.TestCase):
         del cls.train_data, cls.val_data, cls.params, cls.base_param
     
     def test_DistLearning_sampler(self,) -> None:
-        conn_queue = multiprocessing.Queue()
+        conn_queue = mp.Queue()
     
         context = mp.spawn(worker_sampler, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        time.sleep(SLEEP_TIME_DATA_LOADING)
-        samples_0 = conn_queue.get()
-        samples_1 = conn_queue.get()
+        samples_0 = conn_queue.get(TIME_DATA_LOADING)
+        samples_1 = conn_queue.get(TIME_DATA_LOADING)
 
         is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data) // 2) \
                    and (len(samples_0 & samples_1) == 0)
+        while context.join(TIME_DATA_LOADING):
+             pass
 
-        self.assertTrue(context.join() and is_not_intersect)
+        self.assertTrue(is_not_intersect)

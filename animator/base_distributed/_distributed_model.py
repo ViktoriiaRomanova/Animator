@@ -117,7 +117,7 @@ class BaseDist(ABC):
         """
         pass
 
-    def set_requires_grad(self, models: list[nn.Module], state: bool) -> None:
+    def set_requires_grad(self, models: nn.ModuleList, state: bool) -> None:
         """Set gradients state for each model."""
         for model in models:
             for param in model.parameters():

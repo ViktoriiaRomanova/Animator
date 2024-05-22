@@ -10,7 +10,7 @@ from torchvision import io
 
 from animator.utils.preprocessing_data import PreprocessingData
 from animator.style_transfer.get_dataset import GetDataset
-from tests import IMG_PATH
+from tests import DATA_PATH
 
 
 class GetDatasetTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class GetDatasetTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.img_shape = (3, 224, 224)
         pr_data = PreprocessingData(train_size = 0.8)
-        cls.train_img, cls.test_img = pr_data.get_data(IMG_PATH, 10, 0.5)
+        cls.train_img, cls.test_img = pr_data.get_data(DATA_PATH, 10, 0.5)
         cls.mean = torch.tensor((0.485, 0.456, 0.406))
         cls.std = torch.tensor((0.229, 0.224, 0.225))
 
@@ -28,7 +28,7 @@ class GetDatasetTests(unittest.TestCase):
         del cls.train_img, cls.test_img
 
     def test_getitem_right_size(self) -> None:
-        dataset = GetDataset(IMG_PATH, self.train_img,
+        dataset = GetDataset(DATA_PATH, self.train_img,
                              size = self.img_shape[1:],
                              mean = self.mean,
                              std = self.std)
@@ -38,13 +38,13 @@ class GetDatasetTests(unittest.TestCase):
         self.assertEqual(im_size, self.img_shape)
     
     def test_getitem_norm(self) -> None:
-        dataset = GetDataset(IMG_PATH, self.train_img,
+        dataset = GetDataset(DATA_PATH, self.train_img,
                              size = self.img_shape[1:],
                              mean = self.mean,
                              std = self.std)
         norm = Compose([Resize(self.img_shape[1:]), 
                        Normalize(self.mean, self.std)])
-        original_img = norm(io.read_image(os.path.join(IMG_PATH, self.train_img[0])).div(255))
+        original_img = norm(io.read_image(os.path.join(DATA_PATH, self.train_img[0])).div(255))
         
         img = dataset[0]
         mean, std = img.mean(dim = (1, 2)), img.std(dim = (1, 2))
@@ -56,12 +56,12 @@ class GetDatasetTests(unittest.TestCase):
 
     def test_getitem_transformedTrue(self) -> None:
         transform = RandomHorizontalFlip(1)
-        tranformed_dataset = GetDataset(IMG_PATH, self.train_img, 
+        tranformed_dataset = GetDataset(DATA_PATH, self.train_img, 
                                         size = self.img_shape[1:],
                                         mean = self.mean,
                                         std = self.std,
                                         transform = transform)
-        dataset = GetDataset(IMG_PATH, self.train_img,
+        dataset = GetDataset(DATA_PATH, self.train_img,
                              size = self.img_shape[1:],
                              mean = self.mean,
                              std = self.std)
