@@ -4,6 +4,7 @@ import os
 import time
 import shutil
 import pickle
+from queue import Empty
 
 import torch.multiprocessing as mp
 import torch
@@ -15,7 +16,7 @@ from animator.utils.preprocessing_data import PreprocessingData
 from animator.figure_extraction.get_dataset import checker
 from tests.figure_extraction import DATA_PATH, MODEL_CHECKPOINTS, HYPERPARAMETERS
 
-TIME_DATA_LOADING = 5
+TIME_DATA_LOADING = 5.0
 TIME_MODEL_EXEC = 70
 
 def setUpModule() -> None:
@@ -121,19 +122,21 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
         self.assertTrue(len(context.pids()) == self.params.distributed.world_size)
         time.sleep(5)
-        self.assertTrue(context.join())
+        self.assertTrue(context.join(1))
 
     def test_ExtractionDistLearning_init_save_model(self,) -> None: 
         conn_queue = mp.Queue()
     
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
-
-        state = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
-        is_equal = compare_states(state, pickle.loads(conn_queue.get(TIME_DATA_LOADING)))
-
+        try:
+            state = pickle.loads(conn_queue.get(timeout = TIME_DATA_LOADING))
+            is_equal = compare_states(state, pickle.loads(conn_queue.get(timeout = TIME_DATA_LOADING)))
+        except Empty:
+            context.join(0)
+        
         while not context.join(TIME_MODEL_EXEC):
-             pass
+            pass
 
         self.assertTrue(is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
@@ -141,6 +144,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
+        print('test1')
         self.base_param.imodel = 'tests/figure_extraction/test_weights/0.pt'
 
         conn_queue = mp.Queue()
@@ -151,12 +155,17 @@ class MainTrainingPipelineTests(unittest.TestCase):
         init_state = torch.load(self.base_param.imodel)
         # Erase the scaler state as it is not going to be loaded while the scaler is disabled
         # (this test works on CPU)
-        init_state['scaler'] = {}
-        state1 = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
-        state2 = pickle.loads(conn_queue.get(TIME_DATA_LOADING))
-        is_equal = compare_states(state1, init_state) & compare_states(state2, init_state)
+        init_state['scaler'] = {}       
+        try:
+            state1 = pickle.loads(conn_queue.get(timeout = TIME_DATA_LOADING))
+            state2 = pickle.loads(conn_queue.get(timeout = TIME_DATA_LOADING))
+
+            is_equal = compare_states(state1, init_state) & compare_states(state2, init_state)
+        except Empty:
+            context.join(0)
+        
         while not context.join(TIME_MODEL_EXEC):
-             pass
+            pass
         
         self.assertTrue(is_equal and
                         os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
@@ -199,18 +208,22 @@ class DistSamplerTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         del cls.train_data, cls.val_data, cls.params, cls.base_param
-    
+
     def test_DistLearning_sampler(self,) -> None:
         conn_queue = mp.Queue()
     
         context = mp.spawn(worker_sampler, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        samples_0 = conn_queue.get(TIME_DATA_LOADING)
-        samples_1 = conn_queue.get(TIME_DATA_LOADING)
+        try:
+            samples_0 = conn_queue.get(timeout = TIME_DATA_LOADING)
+            samples_1 = conn_queue.get(timeout = TIME_DATA_LOADING)
 
-        is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data) // 2) \
-                   and (len(samples_0 & samples_1) == 0)
+            is_not_intersect = len(samples_0) == len(samples_1) == (len(self.train_data) // 2) \
+                        and (len(samples_0 & samples_1) == 0)
+        except Empty:
+            context.join(0)
+        
         while context.join(TIME_DATA_LOADING):
              pass
 

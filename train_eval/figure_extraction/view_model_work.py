@@ -1,6 +1,6 @@
 from animator.utils.img_processing import ModelImgProcessing, ImgProcessing
-from animator.figure_extraction.UNet_model import UNet
-from animator.style_transfer.preprocessing_data import GetDataset
+from animator.figure_extraction.unet_model import UNet
+from animator.style_transfer.get_dataset import GetDataset
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml

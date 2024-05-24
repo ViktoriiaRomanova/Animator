@@ -93,14 +93,20 @@ class ExtractionDistLearning(BaseDist):
         state = torch.load(weights_dir, map_location = device)
 
         for key, param in self.save_load_params.items():
-            param.load_state_dict(state[key])
+            if isinstance(param, nn.Module):
+                param.module.load_state_dict(state[key])
+            else:
+                param.load_state_dict(state[key])
 
         return state['epoch'] + 1
 
     def save_model(self, epoch: int) -> dict:
         state = {}
         for key, param in self.save_load_params.items():
-            state[key] = param.state_dict()
+            if isinstance(param, nn.Module):
+                state[key] = param.module.state_dict()
+            else:
+                state[key] = param.state_dict()
 
         state['epoch'] = epoch
         return state
