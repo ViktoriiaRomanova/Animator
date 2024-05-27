@@ -144,7 +144,6 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
-        print('test1')
         self.base_param.imodel = 'tests/figure_extraction/test_weights/0.pt'
 
         conn_queue = mp.Queue()
