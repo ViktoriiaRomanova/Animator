@@ -36,6 +36,8 @@ class BaseDataset(ABC):
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float]) -> None:
         """
+            Store data path and all transformations.
+
             Args:
                 * dataset directory,
                 * list of filenames,
