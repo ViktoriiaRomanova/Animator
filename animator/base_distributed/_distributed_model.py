@@ -1,13 +1,13 @@
 import os
-from abc import ABC, abstractmethod
 import shutil
-
+from abc import ABC, abstractmethod
 from datetime import datetime
-from torch import nn
+
 import torch
 import torch.distributed as dist
-from torch.utils.data import DataLoader
+from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
 
 from ..utils.parameter_storages.transfer_parameters import DistParams
 
@@ -15,25 +15,36 @@ from ..utils.parameter_storages.transfer_parameters import DistParams
 class BaseDist(ABC):
     """
         This class is an abstract base class (ABC) for distributed training model.
-        To create a subclass, you need to implement the following five functions:
 
-            !!!ADD FINAL LIST OF FUNCTIONS!!!
+        It is a common core for implementing distributed training on N CPU/GPU.
+        It is obligatory to call the parent __init__ function in a descendants __init__ method.
+        To create a subclass, you need to implement the following functions:
+            - prepare_dataloader
+            - load_model
+            - save_model
     """
+
     def __init__(self, rank: int, params: DistParams, random_state: int) -> None:
         """Initialize the BaseDist class.
 
         Parameters:
             rank -- process index
             world_size -- number of workers(processes) which was spawned
-            random_seed -- a number used to initialize a pseudorandom number generator 
+            random_seed -- a number used to initialize a pseudorandom number generator
 
         When creating your custom class, you need to implement your own initialization.
         In this function, you should first call <BaseDist.__init__(self, rank, world_size)>
         Then, you need to define:
-
-        !!!ADD DESCRIPTION HERE!!!
- 
-        """        
+            - init_args - storage of params to get access to DataSphere resources
+            - batch_size
+            - epochs
+            - DataLoader(s)
+            - Model(s)
+            - loss(s)
+            - optimizer(s)
+            - metric(s)
+            - scaler(optional)
+        """
         self.rank = rank
         self.world_size = params.world_size
         self.random_seed = random_state
@@ -48,24 +59,23 @@ class BaseDist(ABC):
         # Setup the process group
         self.__setup(rank, params)
 
-        #Create/check directories for model weights storage
+        # Create/check directories for model weights storage
         if rank == 0:
             self.model_weights_dir = self.__prepare_strorage_folders()
 
-                
-
     def __setup(self, rank: int, params: DistParams) -> None:
-        """Setup the process group."""
+        """Set up the process group."""
         os.environ['MASTER_ADDR'] = params.address
         os.environ['MASTER_PORT'] = params.port
 
-        if self.device.type == 'cpu': torch.set_num_threads(1) # for test purposes
+        if self.device.type == 'cpu':
+            torch.set_num_threads(1)  # for test purposes
 
         # initialize the process group
         # 'nccl' -- for GPU
         dist.init_process_group(params.backend,
                                 rank = rank, world_size = self.world_size)
-    
+
     def __prepare_strorage_folders(self,) -> str:
         """Create/check directories for model weights storage."""
         working_directory = os.getcwd()
@@ -76,7 +86,7 @@ class BaseDist(ABC):
             os.makedirs(model_weights_dir)
 
         return model_weights_dir
-    
+
     def _init_weights(self, module: nn.Module, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
         def init_func(sub_mod: nn.Module) -> None:
@@ -86,18 +96,19 @@ class BaseDist(ABC):
                 nn.init.constant_(sub_mod.bias, 0.0)
 
         module.apply(init_func)
-    
+
     def _ddp_wrapper(self, model: nn.Module) -> nn.Module:
         return DDP(model, device_ids = self.device if self.device.type != 'cpu' else None,
-                   output_device = self.device  if self.device.type != 'cpu' else None,
+                   output_device = self.device if self.device.type != 'cpu' else None,
                    find_unused_parameters = False)
 
     def make_archive(self, source: str, destination: str) -> None:
-        """ 
-            Archives model checkpoints with name and directory 
-            set at initialization (config.yaml).
         """
-        # Gets the name of a resulted file 
+            Archive model checkpoints.
+
+            Name and directory set at initialization (config.yaml).
+        """
+        # Gets the name of a resulted file
         name, f_format = os.path.basename(destination).split('.')
         # Gets current model weights folder name
         archived_dir = os.path.basename(source)
@@ -107,7 +118,7 @@ class BaseDist(ABC):
         shutil.make_archive(name, f_format, root_dir, archived_dir)
         # Moves archive to requested directory
         shutil.move('{}.{}'.format(name, f_format), os.path.dirname(destination))
-       
+
     @abstractmethod
     def prepare_dataloader(self,) -> DataLoader:
         """
@@ -125,18 +136,10 @@ class BaseDist(ABC):
 
     @abstractmethod
     def load_model(self, path: str, device: torch.device) -> int:
-        """
-            Method to load model, optimizer, etc. saved state.
-        """
+        """Load model, optimizer, etc. saved state."""
         pass
 
     @abstractmethod
-    def save_model(self,):
-        """
-            Method to save model, optimizer, etc. state.
-        """
+    def save_model(self,) -> dict:
+        """Save model, optimizer, etc. state."""
         pass
-        
-
-
-        
