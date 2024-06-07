@@ -88,8 +88,12 @@ class ExtractionDistLearning(BaseDist):
                                       betas = params.optimizers.betas)
 
         self.loss = torch.compile(nn.BCEWithLogitsLoss())
-        self.metric = torch.compile(JaccardIndex('binary',
-                                                 threshold = params.metrics.threshhold))
+        self.metric_train = JaccardIndex('binary',
+                                         threshold = params.metrics.threshhold).to(self.device)
+        self.metric_eval = JaccardIndex('binary',
+                                         threshold = params.metrics.threshhold).to(self.device)
+        self.metric_train.compile()
+        self.metric_eval.compile()
 
         self.save_load_params = {'model': self.model,
                                  'optim': self.optim,
@@ -141,22 +145,25 @@ class ExtractionDistLearning(BaseDist):
         data_loader = DataLoader(data, batch_size = batch_size,
                                  shuffle = False, drop_last = True,
                                  sampler = sampler, pin_memory = True,
-                                 num_workers = 8,
+                                 num_workers = 4,
                                  prefetch_factor = 16,
                                  multiprocessing_context = 'spawn',
                                  persistent_workers = self.device.type != 'cpu',
                                  pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
         return data_loader
 
-    def forward(self, x_batch: torch.Tensor, y_batch: torch.Tensor) -> tuple[torch.tensor, torch.tensor]:
+    def forward(self, x_batch: torch.Tensor, y_batch: torch.Tensor) -> torch.tensor:
         """Make the model forward path and calculate loss and metrics."""
         with torch.autocast(device_type = self.device.type,
                             dtype = torch.float16,
                             enabled = self.device.type == 'cuda'):
             y_pred = self.model(x_batch)
             loss = self.loss(y_pred, y_batch)
-            metric = self.metric(y_pred, y_batch.byte())
-        return loss, metric
+            if self.model.training:
+                self.metric_train(y_pred.detach(), y_batch.byte())
+            else:
+                self.metric_eval(y_pred.detach(), y_batch.byte())
+        return loss
 
     def backward(self, loss: torch.Tensor) -> None:
         """Make a backward path with gradient scaling."""
@@ -178,34 +185,33 @@ class ExtractionDistLearning(BaseDist):
             self.val_loader.sampler.set_epoch(epoch - self.start_epoch)
 
             self.model.train()
-            train_loss, train_metric = 0, 0
+            train_loss = 0
             for x_batch, y_batch in tqdm(self.train_loader):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
-                loss, metric = self.forward(x_batch, y_batch)
+                loss = self.forward(x_batch, y_batch)
                 self.backward(loss)
 
                 train_loss += (loss.detach() / len(self.train_loader))
-                # !it is not final result, to get real metric need to divide it into num_batches
-                train_metric += metric
 
                 del x_batch, y_batch, loss
-            train_metric /= len(self.train_loader)
+            train_metric = self.metric_train.compute()
+            self.metric_train.reset()
+
 
             self.model.eval()
-            val_loss, val_metric = 0, 0
+            val_loss = 0
             with torch.no_grad():
                 for x_batch, y_batch in tqdm(self.val_loader):
                     x_batch = x_batch.to(self.device, non_blocking = True)
                     y_batch = y_batch.to(self.device, non_blocking = True)
-                    loss, metric = self.forward(x_batch, y_batch)
+                    loss = self.forward(x_batch, y_batch)
 
                     val_loss += (loss.detach() / len(self.val_loader))
-                    # !it is not final result, to get real metric need to divide it into num_batches
-                    val_metric += metric
 
                 del x_batch, y_batch, loss
-            val_metric /= len(self.val_loader)
+            val_metric = self.metric_eval.compute()
+            self.metric_eval.reset()
 
             # Share metrics
             metrics = torch.tensor([train_loss / self.world_size,
