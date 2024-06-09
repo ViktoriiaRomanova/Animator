@@ -8,7 +8,7 @@ if [ ! -d $ch_dir ]; then
 mkdir $ch_dir
 fi
 
-datasphere project job execute -p $1 -c config.yaml
+datasphere project job execute -p $1 -c train_eval/figure_extraction/config.yaml
 
 # Move checkpoints to that directory 
 if [ -f $ch_name ]; then

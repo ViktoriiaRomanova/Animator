@@ -14,11 +14,11 @@ if __name__ == '__main__':
     pr_data = PreprocessingData(params.data.data_part)
     train_dataX, val_dataX = pr_data.get_data(base_param.datasetX,
                                               params.main.random_state,
-                                              params.data.data_part)
+                                              params.data.sub_part_data)
         
     train_dataY, val_dataY = pr_data.get_data(base_param.datasetY,
                                               params.main.random_state,
-                                              params.data.data_part)
+                                              params.data.sub_part_data)
     train_data = [train_dataX, train_dataY]
     val_data = [val_dataX, val_dataY]
 

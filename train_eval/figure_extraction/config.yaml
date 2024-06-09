@@ -1,14 +1,20 @@
-name: trainDDP_figureExtraction
+name: train_dist_figure_extraction
 desc: Script for training the figure extraction model (Distributed Data Parallel)
-cmd: python3 trainDDP.py --dataset ${Segmentation}/Training --prhome ${DS_PROJECT_HOME} --omodel ${OUTPUT_MODEL}
+cmd: python3 -m train_eval.figure_extraction.train --dataset ${segmentation}/segmentation --prhome ${DS_PROJECT_HOME} --omodel ${RES_MODEL}
 env:
-  docker: system-python-3-10
+  #docker:
+    #image: cr.yandex/crp9dqvp603lodovpio2/pytorch:2.3.0-cuda12.1-cudnn8-devel_1
+    #username: oauth
+    #password:
+      #secret-id: container
   python:
     type: manual
+    version: 3.10.14
+    requirements-file: requirements.txt
 datasets:
-  - bt1nnnteecjjh2dpnm68: Segmentation
+  - bt10b01jjnrqghp5hgbk: segmentation
 outputs:
-  - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
+  - train_checkpoints/train_checkpoints.zip: RES_MODEL
 flags:
   - attach-project-disk 
-cloud-instance-type: g1.2
+cloud-instance-type: gt4.1

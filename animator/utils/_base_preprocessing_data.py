@@ -31,7 +31,7 @@ class BaseDataset(ABC):
     """Prepare data for DataLoader."""
 
     def __init__(self, img_dir: str, data: list[str],
-                 transform: nn.Module | transforms.Compose,
+                 transform: nn.Module | transforms.Compose | None,
                  size: list[int, int],
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float]) -> None:

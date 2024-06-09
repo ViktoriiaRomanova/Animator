@@ -1,5 +1,4 @@
 import os
-import re
 
 import torch
 import torch.nn as nn
@@ -34,13 +33,12 @@ class MaskDataset(Dataset, _bp.BaseDataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Return image/transformed image and it's mask by given index."""
-        img_path = os.path.join(self.img_dir, os.path.join('input', self.imgnames[idx]))
-        # masks stored in 'png' format and images in 'jpg' format
+        img_path = os.path.join(self.img_dir, os.path.join('images', self.imgnames[idx]))
         mask_path = os.path.join(self.img_dir,
-                                 os.path.join('Output', self.imgnames[idx].split('.')[0] + '.png'))
+                                 os.path.join('masks', self.imgnames[idx]))
 
         image = io.read_image(img_path)
-        mask = io.read_image(mask_path)
+        mask = transforms.functional.rgb_to_grayscale(io.read_image(mask_path))
         image = self.norm(self.to_resized_tensor(image).div(255))
         mask = self.to_resized_tensor(mask).div(255)
 
@@ -52,7 +50,8 @@ class MaskDataset(Dataset, _bp.BaseDataset):
 
 
 def checker(name_: str) -> bool:
-    return name_.endswith('.jpg') and re.match(r'\d_+\d', name_) is not None
+    forbidden = {'ds7_pexels-photo-842569.png'}
+    return name_.endswith('.png') and name_ not in forbidden
 
 
 def get_not_rgb_pic(data: MaskDataset) -> set[int]:

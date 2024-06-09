@@ -45,7 +45,6 @@ class ExtractionDistLearning(BaseDist):
         # prepare data
         transform = transforms.RandomChoice([
             transforms.RandomHorizontalFlip(p = 0.1),
-            transforms.RandomVerticalFlip(p = 0.1),
             transforms.RandomPerspective(p = 0.1)])
 
         train_set = MaskDataset(init_args.dataset, train_data,
@@ -160,9 +159,10 @@ class ExtractionDistLearning(BaseDist):
             y_pred = self.model(x_batch)
             loss = self.loss(y_pred, y_batch)
             if self.model.training:
-                self.metric_train(y_pred.detach(), y_batch.byte())
+                a = self.metric_train(y_pred.detach(), (y_batch > 0).byte())
             else:
-                self.metric_eval(y_pred.detach(), y_batch.byte())
+                a = self.metric_eval(y_pred.detach(), (y_batch > 0).byte())
+            print('metric: ',a)
         return loss
 
     def backward(self, loss: torch.Tensor) -> None:

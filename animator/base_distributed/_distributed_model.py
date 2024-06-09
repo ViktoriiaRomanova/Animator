@@ -109,6 +109,8 @@ class BaseDist(ABC):
             Name and directory set at initialization (config.yaml).
         """
         # Gets the name of a resulted file
+        print(destination)
+        print(os.path.basename(destination).split('.'))
         name, f_format = os.path.basename(destination).split('.')
         # Gets current model weights folder name
         archived_dir = os.path.basename(source)

@@ -4,21 +4,21 @@ from animator.style_transfer.get_dataset import GetDataset
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
-from animator.utils.parameter_storages import TrainingParams
+from animator.utils.parameter_storages.extraction_parameters import ExtTrainingParams
 
-HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'
+HYPERPARAMETERS = 'train_eval/figure_extraction/hyperparameters.yaml'
 
-MODEL_WEIGHTS = 'animator/figure_extraction/train_checkpoints/2024_03_06_15_33_53/1.pt'
-IMG_PATH = 'tests/style_transfer/test_img/'
+MODEL_WEIGHTS = 'oldweights/train_checkpoints/2024_02_27_15_03_07.pt'
+IMG_PATH = 'tests/figure_extraction/test_img/input'
 
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
-        data_transform = TrainingParams(**yaml.safe_load(file)).data
+        data_transform = ExtTrainingParams(**yaml.safe_load(file)).data
 
-    imges = GetDataset(IMG_PATH, ['my_photo.jpg', 'my_photo.jpg'])
+    imges = GetDataset(IMG_PATH, ['0_0000006.jpg'], data_transform.size, data_transform.mean, data_transform.std)
 
     def img_transformation(img: np.array) -> np.array:
-        img = img.transpose(1, 2, 0)
+        img = img.transpose(1, 1, 0)
         img = img * np.array(data_transform.std) + np.array(data_transform.mean)
         return img
 
