@@ -12,13 +12,14 @@ class BaseParamsHolder(ABC):
         parser.add_argument('--prhome', required = False) # path to project home directory READONLY
         parser.add_argument('--omodel', required = True) # output checkpoints of model weights 
         parser.add_argument('--imodel') # input model weights
+        parser.add_argument('--params', required = True) # path to training parameters
 
         self.datasphere_params = parser.parse_args()
 
 class ParamsHolder(BaseParamsHolder):
-    def __init__(self, additional: str, ptype: str = 'Transfer') -> None:
+    def __init__(self, ptype: str = 'Transfer') -> None:
         super().__init__()
-        with open(additional, 'r') as file:
+        with open(self.datasphere_params.params, 'r') as file:
             if ptype == 'Transfer':
                 self.hyper_params = TrainingParams(**yaml.safe_load(file))
             elif ptype == 'Extraction':

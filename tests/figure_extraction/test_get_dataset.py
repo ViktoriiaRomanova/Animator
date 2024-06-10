@@ -18,7 +18,7 @@ class GetDatasetTests(unittest.TestCase):
         cls.img_shape = (3, 224, 224)
         cls.mask_shape = (1, 224, 224)
         pr_data = PreprocessingData(train_size = 0.8)
-        cls.train_img, cls.test_img = pr_data.get_data(os.path.join(DATA_PATH, 'input'), 10, 0.5)
+        cls.train_img, cls.test_img = pr_data.get_data(os.path.join(DATA_PATH, 'images'), 10, 0.5)
         cls.mean = torch.tensor((0.485, 0.456, 0.406))
         cls.std = torch.tensor((0.229, 0.224, 0.225))
 
@@ -45,10 +45,10 @@ class GetDatasetTests(unittest.TestCase):
                              std = self.std)
         norm = Compose([Resize(self.img_shape[1:]), 
                        Normalize(self.mean, self.std)])
-        original_img = norm(io.read_image(os.path.join(os.path.join(DATA_PATH, 'input'),
+        original_img = norm(io.read_image(os.path.join(os.path.join(DATA_PATH, 'images'),
                                                        self.train_img[0])).div(255))
-        original_mask = Resize(self.img_shape[1:])(io.read_image(os.path.join(os.path.join(DATA_PATH, 'Output'),
-                                                       self.train_img[0].split('.')[0] + '.png')).div(255))
+        original_mask = Resize(self.img_shape[1:])(io.read_image(os.path.join(os.path.join(DATA_PATH, 'masks'),
+                                                       self.train_img[0])).div(255))
         
         img, mask = dataset[0]
         mean_img, std_img = img.mean(dim = (1, 2)), img.std(dim = (1, 2))

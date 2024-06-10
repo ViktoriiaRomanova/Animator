@@ -78,11 +78,13 @@ class MainTrainingPipelineTests(unittest.TestCase):
     def setUpClass(cls) -> None:
 
         base_param = Namespace(dataset = DATA_PATH,
-                               omodel = MODEL_CHECKPOINTS, imodel = None)
+                               omodel = MODEL_CHECKPOINTS,
+                               imodel = None,
+                               params = HYPERPARAMETERS)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
-            cls.holder = ParamsHolder(HYPERPARAMETERS, 'Extraction')
-        
+            cls.holder = ParamsHolder('Extraction')
+
         cls.params = cls.holder.hyper_params
         cls.base_param = cls.holder.datasphere_params
 
@@ -102,7 +104,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.model.marchitecture = 'C'
 
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
-        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
+        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'images'),
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         
@@ -176,10 +178,12 @@ class DistSamplerTests(unittest.TestCase):
     def setUpClass(cls) -> None:
        
         base_param = Namespace(dataset = DATA_PATH,
-                               omodel = MODEL_CHECKPOINTS, imodel = None)
+                               omodel = MODEL_CHECKPOINTS,
+                               imodel = None,
+                               params = HYPERPARAMETERS)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
-            cls.holder = ParamsHolder(HYPERPARAMETERS, 'Extraction')
+            cls.holder = ParamsHolder('Extraction')
         
         cls.params = cls.holder.hyper_params
         cls.base_param = cls.holder.datasphere_params
@@ -199,7 +203,7 @@ class DistSamplerTests(unittest.TestCase):
         cls.params.model.marchitecture = 'C'
 
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
-        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'input'),
+        cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'images'),
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         

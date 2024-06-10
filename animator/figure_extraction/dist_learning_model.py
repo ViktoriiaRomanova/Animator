@@ -159,10 +159,9 @@ class ExtractionDistLearning(BaseDist):
             y_pred = self.model(x_batch)
             loss = self.loss(y_pred, y_batch)
             if self.model.training:
-                a = self.metric_train(y_pred.detach(), (y_batch > 0).byte())
+                self.metric_train(y_pred.detach(), (y_batch > 0).byte())
             else:
-                a = self.metric_eval(y_pred.detach(), (y_batch > 0).byte())
-            print('metric: ',a)
+                self.metric_eval(y_pred.detach(), (y_batch > 0).byte())
         return loss
 
     def backward(self, loss: torch.Tensor) -> None:

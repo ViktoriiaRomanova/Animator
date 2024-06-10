@@ -1,12 +1,24 @@
 name: trainDDP_styleTransfer
 desc: Script for training the cycleGAN model (Distributed Data Parallel)
-cmd: python3 train.py --dataset ${Segmentation}/Training --omodel ${OUTPUT_MODEL}
+cmd: >
+  python3 train.py
+  --dataset ${segmentation}/segmentation
+  --prhome ${DS_PROJECT_HOME}
+  --omodel ${OUTPUT_MODEL}
+  --params ${PARAMS}
 env:
-  docker: system-python-3-10
   python:
     type: manual
+    version: 3.10.14
+    requirements-file: requirements.txt
+    local-paths:
+      - train_eval/figure_extraction/train.py
+      - train_eval/figure_extraction/worker.py
+      - animator
 datasets:
   - bt1nnnteecjjh2dpnm68: Segmentation
+inputs:
+  - train_eval/figure_extraction/hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
 cloud-instance-type: g1.2

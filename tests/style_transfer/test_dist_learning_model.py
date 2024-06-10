@@ -75,10 +75,12 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
         base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS, imodel = None)
+                                   omodel = MODEL_CHECKPOINTS,
+                                   imodel = None,
+                                   params = HYPERPARAMETERS)
         
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
-            cls.holder = ParamsHolder(HYPERPARAMETERS)
+            cls.holder = ParamsHolder()
 
         cls.params = cls.holder.hyper_params
         cls.base_param = cls.holder.datasphere_params
@@ -175,10 +177,12 @@ class DistSamplerTests(unittest.TestCase):
        
         base_param = Namespace(datasetX = DATA_PATH,
                                    datasetY = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS, imodel = None)
+                                   omodel = MODEL_CHECKPOINTS,
+                                   imodel = None,
+                                   params = HYPERPARAMETERS)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
-            cls.holder = ParamsHolder(HYPERPARAMETERS)
+            cls.holder = ParamsHolder()
         
         cls.params = cls.holder.hyper_params
         cls.base_param = cls.holder.datasphere_params

@@ -3,16 +3,14 @@ import torch.multiprocessing as mp
 
 from animator.utils.preprocessing_data import PreprocessingData
 from animator.utils.parameter_storages.params_holder import ParamsHolder
-from train_eval.figure_extraction.worker import worker
+from worker import worker
 from animator.figure_extraction.get_dataset import checker
-
-HYPERPARAMETERS = 'train_eval/figure_extraction/hyperparameters.yaml'
 
 if __name__ == '__main__':
     os.system('nvidia-smi')
     os.system('conda info --envs')
 
-    params_holder = ParamsHolder(HYPERPARAMETERS, ptype = 'Extraction')
+    params_holder = ParamsHolder(ptype = 'Extraction')
     base_param, params = params_holder.datasphere_params, params_holder.hyper_params       
 
     pr_data = PreprocessingData(params.data.data_part, checker = checker)

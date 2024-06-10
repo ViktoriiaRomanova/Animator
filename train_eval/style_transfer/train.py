@@ -4,11 +4,9 @@ from animator.utils.preprocessing_data import PreprocessingData
 from animator.utils.parameter_storages.params_holder import ParamsHolder
 from . import worker
 
-HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'
-
 if __name__ == '__main__':
 
-    params_holder = ParamsHolder(HYPERPARAMETERS)
+    params_holder = ParamsHolder()
     base_param, params = params_holder.datasphere_params, params_holder.hyper_params
 
     pr_data = PreprocessingData(params.data.data_part)
