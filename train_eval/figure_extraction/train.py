@@ -7,8 +7,6 @@ from worker import worker
 from animator.figure_extraction.get_dataset import checker
 
 if __name__ == '__main__':
-    os.system('nvidia-smi')
-    os.system('conda info --envs')
 
     params_holder = ParamsHolder(ptype = 'Extraction')
     base_param, params = params_holder.datasphere_params, params_holder.hyper_params       

@@ -15,15 +15,15 @@ env:
   python:
     type: manual
     version: 3.10.14
-    requirements-file: requirements.txt
+    requirements-file: ../../requirements.txt
     local-paths:
-      - train_eval/figure_extraction/train.py
-      - train_eval/figure_extraction/worker.py
-      - animator
+      - train.py
+      - worker.py
+      - ../../animator
 datasets:
   - bt10b01jjnrqghp5hgbk: segmentation
 inputs:
-  - train_eval/figure_extraction/hyperparameters.yaml: PARAMS
+  - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
 flags:

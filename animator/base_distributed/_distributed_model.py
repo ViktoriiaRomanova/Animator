@@ -102,16 +102,14 @@ class BaseDist(ABC):
                    output_device = self.device if self.device.type != 'cpu' else None,
                    find_unused_parameters = False)
 
-    def make_archive(self, source: str, destination: str) -> None:
+    def make_archive(self, source: str, destination: str,
+                     name: str = 'train_checkpoints',
+                     f_format: str = 'zip') -> None:
         """
             Archive model checkpoints.
 
             Name and directory set at initialization (config.yaml).
         """
-        # Gets the name of a resulted file
-        print(destination)
-        print(os.path.basename(destination).split('.'))
-        name, f_format = os.path.basename(destination).split('.')
         # Gets current model weights folder name
         archived_dir = os.path.basename(source)
         # Gets the catalogue address where the folder is stored
@@ -119,7 +117,7 @@ class BaseDist(ABC):
         # Creates archive at main directory: /job/
         shutil.make_archive(name, f_format, root_dir, archived_dir)
         # Moves archive to requested directory
-        shutil.move('{}.{}'.format(name, f_format), os.path.dirname(destination))
+        shutil.move('{}.{}'.format(name, f_format), destination)
 
     @abstractmethod
     def prepare_dataloader(self,) -> DataLoader:
