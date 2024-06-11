@@ -11,6 +11,7 @@
 
 '''
 import argparse
+
 from animator.utils.create_summary_wrighter import Logger
 
 parser = argparse.ArgumentParser()

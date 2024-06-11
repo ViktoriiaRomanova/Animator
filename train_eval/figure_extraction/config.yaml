@@ -3,7 +3,6 @@ desc: Script for training the figure extraction model (Distributed Data Parallel
 cmd: >
   python3 train.py
   --dataset ${segmentation}/segmentation
-  --prhome ${DS_PROJECT_HOME}
   --omodel ${OUTPUT_MODEL}
   --params ${PARAMS}
 env:
@@ -26,6 +25,4 @@ inputs:
   - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
-flags:
-  - attach-project-disk 
-cloud-instance-type: gt4.1
+cloud-instance-type: g1.2

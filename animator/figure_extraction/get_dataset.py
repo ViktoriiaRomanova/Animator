@@ -50,7 +50,7 @@ class MaskDataset(Dataset, _bp.BaseDataset):
 
 
 def checker(name_: str) -> bool:
-    forbidden = {'ds7_pexels-photo-842569.png'}
+    forbidden = {'ds7_pexels-photo-842569.png', 'ds7_pexels-photo-724887.png'}
     return name_.endswith('.png') and name_ not in forbidden
 
 
