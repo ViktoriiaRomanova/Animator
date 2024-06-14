@@ -1,6 +1,8 @@
 import os
 from argparse import Namespace
 from json import dumps as jdumps
+import shutil
+from warnings import warn
 
 import torch
 import torch.distributed as dist
@@ -29,7 +31,7 @@ class ExtractionDistLearning(BaseDist):
             Create and initialize model(s), optimizer(s) etc. and all parameters of distributed training.
 
             Parameters:
-                - ranc -- process index
+                - rank -- process index
                 - init_args -- storage of params to get access to DataSphere resources
                 - params -- hyperparameters of training
                 - train_data - list of filenames used for training
@@ -41,6 +43,14 @@ class ExtractionDistLearning(BaseDist):
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
         self.start_epoch = 0
+
+        # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
+        self.s3_storage = None
+        if rank == 0:
+            self.s3_storage = os.path.join(init_args.st,
+                                           os.path.basename(self.model_weights_dir))
+            if not os.path.exists(self.s3_storage):
+                os.makedirs(self.s3_storage)
 
         # prepare data
         transform = transforms.RandomChoice([
@@ -235,8 +245,22 @@ class ExtractionDistLearning(BaseDist):
                 print(json_metrics)
 
                 if (epoch + 1) % 1 == 0:
-                    torch.save(self.save_model(epoch),
-                               os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
+                    if self.s3_storage is not None:
+                        # Save model weights at S3 storage if the path to a bucket provided
+                        torch.save(self.save_model(epoch),
+                                   os.path.join(self.s3_storage, str(epoch) + '.pt'))
+                    else:
+                        # Otherwise, save at a remote machine
+                        warn('Intermediate model weights are saved at the remote machine and will be lost\
+                              after the end of the training process')
+                        torch.save(self.save_model(epoch),
+                                   os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
+
         if self.rank == 0:
-            self.make_archive(self.model_weights_dir, self.init_args.omodel)
+            # Save the result model with the same folder name as on a remote machine
+            path =  os.path.join(self.init_args.omodel, os.path.basename(self.model_weights_dir))
+            os.makedirs(path)
+            torch.save(self.save_model(epoch),
+                       os.path.join(path, str(self.epochs - 1) + '.pt'))
+
         dist.destroy_process_group()

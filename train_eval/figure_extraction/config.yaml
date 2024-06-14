@@ -2,9 +2,10 @@ name: train_dist_figure_extraction
 desc: Script for training the figure extraction model (Distributed Data Parallel)
 cmd: >
   python3 train.py
-  --dataset ${segmentation}/segmentation
+  --dataset ${SEGMENTATION}/segmentation
   --omodel ${OUTPUT_MODEL}
   --params ${PARAMS}
+  --st ${RES_STORAGE}
 env:
   #docker:
     #image: cr.yandex/crp9dqvp603lodovpio2/pytorch:2.3.0-cuda12.1-cudnn8-devel_1
@@ -20,9 +21,11 @@ env:
       - worker.py
       - ../../animator
 datasets:
-  - bt10b01jjnrqghp5hgbk: segmentation
+  - bt10b01jjnrqghp5hgbk: SEGMENTATION
+s3-mounts:
+  - bt11r1gu4mqn42erca1d: RES_STORAGE
 inputs:
   - hyperparameters.yaml: PARAMS
 outputs:
-  - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
-cloud-instance-type: g1.2
+  - train_checkpoints: OUTPUT_MODEL
+cloud-instance-type: gt4.1

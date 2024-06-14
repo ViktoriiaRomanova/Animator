@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 set -e
 ch_dir=train_checkpoints/
-ch_name=train_checkpoints.zip
+#ch_name=train_checkpoints.zip
 
 # Move to script directory
 cd $(dirname "$0")
@@ -18,5 +18,5 @@ datasphere project job execute -p $1 -c config.yaml
 #mv $ch_name $ch_dir
 #fi
 #tar -xvf $ch_dir$ch_name -C $ch_dir
-unzip $ch_dir$ch_name -d $ch_dir
-rm $ch_dir$ch_name
+#unzip $ch_dir$ch_name -d $ch_dir
+#rm $ch_dir$ch_name

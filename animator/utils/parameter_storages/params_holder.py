@@ -13,6 +13,7 @@ class BaseParamsHolder(ABC):
         parser.add_argument('--omodel', required = True) # output checkpoints of model weights 
         parser.add_argument('--imodel') # input model weights
         parser.add_argument('--params', required = True) # path to training parameters
+        parser.add_argument('--st', required = False) # path to S3 storage to store intermediate results
 
         self.datasphere_params = parser.parse_args()
 
