@@ -8,7 +8,7 @@ class ModelImgProcessing(BaseImgProcessing):
     def __init__(self, model: nn.Module , path: str, transform: Callable[[np.array], np.array] | None = None) -> None:
         super().__init__(transform)
         self.model = model
-        state = torch.load(path, map_location = torch.device('cpu'))['model_state_dict']
+        state = torch.load(path, map_location = torch.device('cpu'))['model']
         self.model.load_state_dict(state)
         self.model.eval()
     

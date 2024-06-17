@@ -9,7 +9,7 @@ from animator.figure_extraction.get_dataset import checker
 if __name__ == '__main__':
 
     params_holder = ParamsHolder(ptype = 'Extraction')
-    base_param, params = params_holder.datasphere_params, params_holder.hyper_params       
+    base_param, params = params_holder.datasphere_params, params_holder.hyper_params     
 
     pr_data = PreprocessingData(params.data.data_part, checker = checker)
     train_data, val_data = pr_data.get_data(os.path.join(base_param.dataset, 'images'),

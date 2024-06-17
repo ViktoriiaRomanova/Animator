@@ -13,7 +13,10 @@ fi
 
 datasphere project job execute -p $1 -c config.yaml
 
-# Move checkpoints to that directory 
+# Move checkpoints to that directory
+mv ./output_model*/* $ch_dir
+rm -r output_model*
+
 #if [ -f $ch_name ]; then
 #mv $ch_name $ch_dir
 #fi

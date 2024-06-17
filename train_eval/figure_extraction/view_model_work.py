@@ -8,17 +8,17 @@ from animator.utils.parameter_storages.extraction_parameters import ExtTrainingP
 
 HYPERPARAMETERS = 'train_eval/figure_extraction/hyperparameters.yaml'
 
-MODEL_WEIGHTS = 'oldweights/train_checkpoints/2024_02_27_15_03_07.pt'
-IMG_PATH = 'tests/figure_extraction/test_img/input'
+MODEL_WEIGHTS = 'train_eval/figure_extraction/train_checkpoints/2024_06_17_12_47_12/29.pt'
+IMG_PATH = 'tests/figure_extraction/test_img/images'
 
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
         data_transform = ExtTrainingParams(**yaml.safe_load(file)).data
 
-    imges = GetDataset(IMG_PATH, ['0_0000006.jpg'], data_transform.size, data_transform.mean, data_transform.std)
+    imges = GetDataset(IMG_PATH, ['0_00030.png', '0_00330.png', '0_00180.png', '0_00360.png', '0_00420.png', '1_00030.png','1_00150.png', '1_00240.png'], data_transform.size, data_transform.mean, data_transform.std)
 
     def img_transformation(img: np.array) -> np.array:
-        img = img.transpose(1, 1, 0)
+        img = img.transpose(1, 2, 0)
         img = img * np.array(data_transform.std) + np.array(data_transform.mean)
         return img
 
