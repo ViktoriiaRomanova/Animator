@@ -5,7 +5,7 @@ from ._base_img_processing import BaseImgProcessing
 from typing import Callable
 
 class ModelImgProcessing(BaseImgProcessing):
-    def __init__(self, model: nn.Module , path: str, mode: str = 'mask', transform: Callable[[np.array], np.array] | None = None) -> None:
+    def __init__(self, model: nn.Module , path: str, mode: str = 'mask', transform: Callable[[torch.Tensor], torch.Tensor] | None = None) -> None:
         super().__init__()
         self.model = model
         self.transform = transform
@@ -14,8 +14,9 @@ class ModelImgProcessing(BaseImgProcessing):
         self.model.eval()
         self.mode = mode
     
-    def __call__(self, img: torch.Tensor) -> np.array:
-        img = img.unsqueeze(0)
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        if len(img) == 3:
+            img = img.unsqueeze(0)
         with torch.no_grad():
             if self.mode == 'mask':
                 img = self._conv_to_img(self.model(img))
@@ -28,9 +29,9 @@ class ModelImgProcessing(BaseImgProcessing):
         return img
 
 class ImgProcessing(BaseImgProcessing):
-    def __init__(self, transform: Callable[[np.array], np.array] | None = None) -> None:
+    def __init__(self, transform: Callable[[torch.tensor], torch.tensor] | None = None) -> None:
         super().__init__()
         self.transform = transform
     
-    def __call__(self, img: torch.Tensor) -> np.array:
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
         return self._conv_to_img(img, self.transform)
