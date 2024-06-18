@@ -5,13 +5,13 @@ from collections.abc import Callable
 import torch
 
 class BaseImgProcessing(ABC):
-    def __init__(self, transform: Callable[[np.array], np.array] | None) -> None:
-        self.transform = transform
+    def __init__(self,) -> None:
+        pass
 
-    def _conv_to_img(self, img: torch.tensor) -> np.array:
+    def _conv_to_img(self, img: torch.tensor, transform: Callable[[np.array], np.array] | None = None) -> np.array:
         """Convert image to display."""
         img = img.numpy().squeeze()
-        if self.transform is not None:
+        if transform is not None:
             img = self.transform(img)
         img.clip(0, 1, out = img)
         return img

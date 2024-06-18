@@ -1,7 +1,7 @@
 main: 
   random_state: 10
   batch_size: 64
-  epochs: 10
+  epochs: 30
 
 data:
   data_part: 0.9 # Proportions to split data for train and evaluation
@@ -18,7 +18,7 @@ distributed:
   address: 'localhost'
 
 optimizers:
-  lr: 0.0001
+  lr: 0.0003
   betas: [0.9, 0.999]    
 
 model:

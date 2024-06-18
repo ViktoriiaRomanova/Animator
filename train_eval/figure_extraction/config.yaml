@@ -26,7 +26,7 @@ datasets:
 s3-mounts:
   - bt11r1gu4mqn42erca1d: RES_STORAGE
 inputs:
-  - train_checkpoints/2024_06_17_12_47_12/29.pt: IMODEL
+  - train_checkpoints/2024_06_17_16_30_05/69.pt: IMODEL
   - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints: OUTPUT_MODEL
