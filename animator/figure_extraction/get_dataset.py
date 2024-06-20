@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from ..utils import _base_preprocessing_data as _bp
 
-__all__ = ['MaskDataset', 'get_not_rgb_pic']
+__all__ = ['MaskDataset', 'get_data', 'checker', 'get_not_rgb_pic']
 
 
 class MaskDataset(Dataset, _bp.BaseDataset):
@@ -38,7 +38,7 @@ class MaskDataset(Dataset, _bp.BaseDataset):
                                  os.path.join('masks', self.imgnames[idx]))
 
         image = io.read_image(img_path)
-        mask = transforms.functional.rgb_to_grayscale(io.read_image(mask_path))
+        mask = io.read_image(mask_path, mode = io.ImageReadMode.GRAY)
         image = self.norm(self.to_resized_tensor(image).div(255))
         mask = self.to_resized_tensor(mask).div(255)
 
@@ -51,6 +51,15 @@ class MaskDataset(Dataset, _bp.BaseDataset):
 def checker(name_: str) -> bool:
     forbidden = {'ds7_pexels-photo-842569.png', 'ds7_pexels-photo-724887.png'}
     return name_.endswith('.png') and name_ not in forbidden
+
+def get_data(data_path: str, checker = checker) -> list[str]:
+        """Collect data."""
+        filenames = []
+        for name_ in os.listdir(data_path):
+            if checker(name_):
+                filenames.append(name_)
+
+        return filenames
 
 
 def get_not_rgb_pic(data: MaskDataset) -> set[int]:

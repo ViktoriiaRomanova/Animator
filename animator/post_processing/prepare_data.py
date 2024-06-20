@@ -1,7 +1,7 @@
 import os
 
 import torch.nn as nn
-from torch import Tensor
+from torch import tensor
 from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision import io
@@ -26,11 +26,12 @@ class PostProcessingDataset(Dataset, _bp.BaseDataset):
         """
         super().__init__(img_dir, data, transform, size, mean, std)
 
-    def __getitem__(self, idx: int) -> Tensor:
+    def __getitem__(self, idx: int) -> tensor:
         """Return image/transformed image by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
         
         image = io.read_image(img_path)
+        image = transforms.functional.center_crop(image, output_size = max(image.shape))
         image = self.norm(self.to_resized_tensor(image).div(255))
 
         return image if self.transforms is None else self.transforms(image)
