@@ -2,6 +2,7 @@ from argparse import Namespace
 from tqdm import tqdm
 import os
 from json import dumps as jdumps
+from warnings import warn
 
 import torch
 from torch import nn
@@ -29,6 +30,14 @@ class DistLearning(BaseDist):
         self.init_args = init_args
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
+
+        # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
+        self.s3_storage = None
+        if rank == 0:
+            self.s3_storage = os.path.join(init_args.st,
+                                           os.path.basename(self.model_weights_dir))
+            if not os.path.exists(self.s3_storage):
+                os.makedirs(self.s3_storage)
 
         train_setX = GetDataset(init_args.datasetX, train_data[0],
                                size = params.data.size,
@@ -260,9 +269,19 @@ class DistLearning(BaseDist):
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
             
-                if (epoch + 1) % 1 == 0:                   
-                    torch.save(self.save_model(epoch), 
-                            os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
-        if self.rank == 0:           
-            self.make_archive(self.model_weights_dir, self.init_args.omodel)
+                if (epoch + 1) % 1 == 0:
+                    if self.s3_storage is not None:
+                        # Save model weights at S3 storage if the path to a bucket provided
+                        torch.save(self.save_model(epoch),
+                                   os.path.join(self.s3_storage, str(epoch) + '.pt'))
+                    else:
+                        # Otherwise, save at a remote machine
+                        warn('Intermediate model weights are saved at the remote machine and will be lost\
+                              after the end of the training process')
+                        torch.save(self.save_model(epoch),
+                                   os.path.join(self.model_weights_dir, str(epoch) + '.pt'))               
+        if self.rank == 0:
+            # Save final results at s3 storage           
+            torch.save(self.save_model(epoch),
+                       os.path.join(self.s3_storage, str(epoch) + '.pt'))
         dist.destroy_process_group()

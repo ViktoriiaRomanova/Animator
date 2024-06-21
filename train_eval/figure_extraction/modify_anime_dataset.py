@@ -72,5 +72,5 @@ if __name__ == '__main__':
             continue
         for j, (mask, img) in enumerate(zip(model_based_img_processor(input_img_resize(batch)),
                                             img_processor(batch))):
-            io.write_png(mask * img, os.path.join(RESULT_PATH, filenames[8 * i + j]),
+            io.write_png(mask * img, os.path.join(RESULT_PATH, '{}.png'.format(8 * i + j)),
                          compression_level = 0)

@@ -2,23 +2,24 @@ name: trainDDP_styleTransfer
 desc: Script for training the cycleGAN model (Distributed Data Parallel)
 cmd: >
   python3 train.py
-  --dataset ${segmentation}/segmentation
+  --dataset ${TRANSFER}/transfer
   --prhome ${DS_PROJECT_HOME}
   --omodel ${OUTPUT_MODEL}
   --params ${PARAMS}
+  --st ${RES_STORAGE}
 env:
   python:
     type: manual
     version: 3.10.14
     requirements-file: requirements.txt
     local-paths:
-      - train_eval/figure_extraction/train.py
-      - train_eval/figure_extraction/worker.py
+      - train.py
+      - worker.py
       - animator
 datasets:
-  - bt1nnnteecjjh2dpnm68: Segmentation
-inputs:
-  - train_eval/figure_extraction/hyperparameters.yaml: PARAMS
+  - bt1nnnteecjjh2dpnm68: TRANSFER
+s3-mounts:
+  - bt1osbecqjrq62ucvoec: RES_STORAGE
 outputs:
-  - train_checkpoints/train_checkpoints.zip: OUTPUT_MODEL
+  - train_checkpoints: OUTPUT_MODEL
 cloud-instance-type: g1.2
