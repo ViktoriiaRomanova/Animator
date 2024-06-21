@@ -1,25 +1,15 @@
 import os
 
-import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from torch import tensor
 from torchvision import transforms, io
 
-from animator.figure_extraction.get_dataset import checker
+from animator.figure_extraction.get_dataset import get_data
 
 DATA_PATH = '/home/viktoriia/Downloads/segmentation/'
 HYPERPARAMETERS = 'train_eval/figure_extraction/hyperparameters.yaml'
 MODEL_WEIGHTS = 'train_eval/figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt'
 RESULT_PATH = '/home/viktoriia/Downloads/transfer/'
-
-def get_data(data_path: str, checker = checker) -> list[str]:
-        """Collect data."""
-        filenames = []
-        for name_ in os.listdir(data_path):
-            if checker(name_):
-                filenames.append(name_)
-
-        return filenames
 
 class ModifyDataset(Dataset):
     """Prepare data for DataLoader to load in trained model."""

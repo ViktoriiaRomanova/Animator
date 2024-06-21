@@ -19,7 +19,7 @@ class ModelImgProcessing(BaseImgProcessing):
             img = img.unsqueeze(0)
         with torch.no_grad():
             if self.mode == 'mask':
-                img = self._conv_to_img(self.model(img))
+                img = self._conv_to_img(self.model(img), self.transform)
             elif self.mode == 'prune':
                 mask = self.model(img).permute((0, 2, 3, 1)) # get mask in format HxWxC
                 # Add mask as alpha channel 

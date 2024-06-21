@@ -23,7 +23,7 @@ if __name__ == '__main__':
                                   data_transform.mean,
                                   data_transform.std)
     dataloader = DataLoader(imges, batch_size = len(names),
-                            shuffle = False, num_workers = 4,
+                            shuffle = False, num_workers = 1,
                             drop_last = False)
 
     def img_transformation(img: tensor) -> tensor:
