@@ -33,18 +33,21 @@ class DistLearning(BaseDist):
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         self.s3_storage = None
-        if rank == 0:
+        if rank == 0 and init_args.st is not None:
             self.s3_storage = os.path.join(init_args.st,
                                            os.path.basename(self.model_weights_dir))
             if not os.path.exists(self.s3_storage):
                 os.makedirs(self.s3_storage)
 
-        train_setX = GetDataset(init_args.datasetX, train_data[0],
+        datasetX = os.path.join(init_args.dataset, 'domainX/')
+        datasetY = os.path.join(init_args.dataset, 'domainY/')
+
+        train_setX = GetDataset(datasetX, train_data[0],
                                size = params.data.size,
                                mean = params.data.mean,
                                std = params.data.std)
         
-        train_setY = GetDataset(init_args.datasetY, train_data[1],
+        train_setY = GetDataset(datasetY, train_data[1],
                                size = params.data.size,
                                mean = params.data.mean,
                                std = params.data.std)
@@ -276,8 +279,8 @@ class DistLearning(BaseDist):
                                    os.path.join(self.s3_storage, str(epoch) + '.pt'))
                     else:
                         # Otherwise, save at a remote machine
-                        warn('Intermediate model weights are saved at the remote machine and will be lost\
-                              after the end of the training process')
+                        warn(''.join('Intermediate model weights are saved at the remote machine and will be lost',
+                                     'after the end of the training process'))
                         torch.save(self.save_model(epoch),
                                    os.path.join(self.model_weights_dir, str(epoch) + '.pt'))               
         if self.rank == 0:

@@ -13,7 +13,7 @@ fi
 datasphere project job execute -p $1 -c config.yaml
 
 # Get the name of the last obtained weights
-WNAME = `aws s3 ls s3://transfer --recursive --output text | sort | tail -n 1 | awk '{print $4}'`
+WNAME=$(aws s3 ls s3://transfer --recursive --output text | sort | tail -n 1 | awk '{print $4}')
 
 # Copy to the local folder
 aws s3 cp s3://transfer/$WNAME $ch_dir

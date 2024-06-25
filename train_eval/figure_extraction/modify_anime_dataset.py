@@ -22,7 +22,7 @@ from animator.utils.parameter_storages.extraction_parameters import ExtTrainingP
 DATA_PATH = '/home/viktoriia/Downloads/drawing/'
 HYPERPARAMETERS = 'train_eval/figure_extraction/hyperparameters.yaml'
 MODEL_WEIGHTS = 'train_eval/figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt'
-RESULT_PATH = '/home/viktoriia/Downloads/transform/drawing'
+RESULT_PATH = '/home/viktoriia/Downloads/transform/domainY'
 
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
@@ -35,11 +35,13 @@ if __name__ == '__main__':
     # Makes dataset prepare images of size 3x512x512
     data_transform.size = (512, 512)
 
+    batch_size = 32
+
     dataset = PostProcessingDataset(DATA_PATH, filenames,
                                     data_transform.size,
                                     data_transform.mean,
                                     data_transform.std)
-    data_loader = DataLoader(dataset, batch_size = 32, shuffle = False,
+    data_loader = DataLoader(dataset, batch_size = batch_size, shuffle = False,
                              num_workers = 2, drop_last = False)
 
     # To increase the size of the resulting mask
@@ -68,9 +70,9 @@ if __name__ == '__main__':
 
     for i, batch in enumerate(tqdm(data_loader)):
         if len(batch.shape) != 4:
-            print(i, filenames[8 * i: 8 * (i + 1)])
+            print(i, filenames[batch_size * i: batch_size * (i + 1)])
             continue
         for j, (mask, img) in enumerate(zip(model_based_img_processor(input_img_resize(batch)),
                                             img_processor(batch))):
-            io.write_png(mask * img, os.path.join(RESULT_PATH, '{}.png'.format(8 * i + j)),
+            io.write_png(mask * img, os.path.join(RESULT_PATH, '{}.png'.format(batch_size * i + j)),
                          compression_level = 0)

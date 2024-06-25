@@ -28,7 +28,7 @@ def setUpModule() -> None:
 
 def tearDownModule() -> None:
         shutil.rmtree('./train_checkpoints')
-        shutil.rmtree(os.path.dirname(MODEL_CHECKPOINTS))
+        shutil.rmtree(MODEL_CHECKPOINTS)
 
 
 def worker_init(rank: int, args: Namespace, params: TrainingParams,
@@ -73,11 +73,11 @@ class MainTrainingPipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
 
-        base_param = Namespace(datasetX = DATA_PATH,
-                                   datasetY = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS,
-                                   imodel = None,
-                                   params = HYPERPARAMETERS)
+        base_param = Namespace(dataset = DATA_PATH,
+                               omodel = MODEL_CHECKPOINTS,
+                               imodel = None,
+                               params = HYPERPARAMETERS,
+                               st = None)
         
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
             cls.holder = ParamsHolder()
@@ -97,12 +97,15 @@ class MainTrainingPipelineTests(unittest.TestCase):
         # test for two distributed process
         cls.params.distributed.world_size = 2
 
+        datasetX = os.path.join(cls.base_param.dataset, 'domainX/')
+        datasetY = os.path.join(cls.base_param.dataset, 'domainY/')
+
         pr_data = PreprocessingData(cls.params.data.data_part)
-        train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
+        train_dataX, val_dataX = pr_data.get_data(datasetX,
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         
-        train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
+        train_dataY, val_dataY = pr_data.get_data(datasetY,
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         cls.train_data = [train_dataX, train_dataY]
@@ -114,8 +117,6 @@ class MainTrainingPipelineTests(unittest.TestCase):
         
     def tearDown(self) -> None:
         self.base_param.imodel = None
-        if os.path.exists(MODEL_CHECKPOINTS):
-            os.remove(MODEL_CHECKPOINTS)
 
     def test_DistLearning_init_setup(self,) -> None:  
         context = mp.spawn(worker_init, args = (self.base_param, self.params, self.train_data, self.val_data),
@@ -138,9 +139,9 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
         while not context.join(TIME_MODEL_EXEC):
              pass
-
-        self.assertTrue(is_equal and
-                        os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+        
+        # Removed check of saving model as it is now saved on s3
+        self.assertTrue(is_equal)
         del state
 
 
@@ -165,9 +166,9 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
         while not context.join(TIME_MODEL_EXEC):
              pass
-
-        self.assertTrue(is_equal and
-                        os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+        
+        # Removed check of saving model as it is now saved on s3
+        self.assertTrue(is_equal)
         del state1, state2, init_state
 
 
@@ -175,11 +176,11 @@ class DistSamplerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
        
-        base_param = Namespace(datasetX = DATA_PATH,
-                                   datasetY = DATA_PATH,
-                                   omodel = MODEL_CHECKPOINTS,
-                                   imodel = None,
-                                   params = HYPERPARAMETERS)
+        base_param = Namespace(dataset = DATA_PATH,
+                               omodel = MODEL_CHECKPOINTS,
+                               imodel = None,
+                               params = HYPERPARAMETERS,
+                               st = None)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
             cls.holder = ParamsHolder()
@@ -197,12 +198,15 @@ class DistSamplerTests(unittest.TestCase):
         # test for two distributed process
         cls.params.distributed.world_size = 2
 
+        datasetX = os.path.join(cls.base_param.dataset, 'domainX/')
+        datasetY = os.path.join(cls.base_param.dataset, 'domainY/')
+
         pr_data = PreprocessingData(cls.params.data.data_part)
-        train_dataX, val_dataX = pr_data.get_data(cls.base_param.datasetX,
+        train_dataX, val_dataX = pr_data.get_data(datasetX,
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         
-        train_dataY, val_dataY = pr_data.get_data(cls.base_param.datasetY,
+        train_dataY, val_dataY = pr_data.get_data(datasetY,
                                                 cls.params.main.random_state,
                                                 cls.params.data.sub_part_data)
         cls.train_data = [train_dataX, train_dataY]

@@ -30,9 +30,9 @@ def tearDownModule() -> None:
     dir = './train_checkpoints'
     if os.path.exists(dir):
         shutil.rmtree(dir)
-    dir = os.path.dirname(MODEL_CHECKPOINTS)
-    if os.path.exists(dir):
-        shutil.rmtree(dir)
+
+    if os.path.exists(MODEL_CHECKPOINTS):
+        shutil.rmtree(MODEL_CHECKPOINTS)
 
 
 def worker_init(rank: int, args: Namespace, params: ExtTrainingParams,
@@ -70,7 +70,16 @@ def compare_states(state1: dict, state2: dict) -> bool:
              return False
         ans &= state1[key].__str__() == state2[key].__str__()
         if not ans: return ans
-    return ans    
+    return ans
+
+def get_dir_size(path: str) -> int:
+    size = 0
+    for entry in os.scandir(path):
+        if entry.is_file():
+            size += entry.stat().st_size
+        else:
+            size += get_dir_size(entry.path)
+    return size
 
 
 class MainTrainingPipelineTests(unittest.TestCase):
@@ -115,8 +124,6 @@ class MainTrainingPipelineTests(unittest.TestCase):
         
     def tearDown(self) -> None:
         self.base_param.imodel = None
-        if os.path.exists(MODEL_CHECKPOINTS):
-            os.remove(MODEL_CHECKPOINTS)
 
     def test_ExtractionDistLearning_init_setup(self,) -> None:     
         context = mp.spawn(worker_init, args = (self.base_param, self.params, self.train_data, self.val_data),
@@ -141,7 +148,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
             pass
 
         self.assertTrue(is_equal and
-                        os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+                        get_dir_size(MODEL_CHECKPOINTS) > 10 * 1024)
         del state
 
 
@@ -169,7 +176,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
             pass
         
         self.assertTrue(is_equal and
-                        os.path.getsize(MODEL_CHECKPOINTS) > 10 * 1024)
+                        get_dir_size(MODEL_CHECKPOINTS) > 10 * 1024)
         del state1, state2, init_state
 
 

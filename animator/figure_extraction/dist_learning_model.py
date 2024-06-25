@@ -46,7 +46,7 @@ class ExtractionDistLearning(BaseDist):
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         self.s3_storage = None
-        if rank == 0:
+        if rank == 0 and init_args.st is not None:
             self.s3_storage = os.path.join(init_args.st,
                                            os.path.basename(self.model_weights_dir))
             if not os.path.exists(self.s3_storage):

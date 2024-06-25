@@ -1,1 +1,1 @@
-MODEL_CHECKPOINTS = 'tests/style_transfer/checkpoints/train_checkpoints.zip'
+MODEL_CHECKPOINTS = 'tests/style_transfer/checkpoints/'

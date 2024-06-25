@@ -2,7 +2,7 @@ import unittest
 import re
 
 from animator.utils.preprocessing_data import PreprocessingData
-from tests import DATA_PATH, DATA_PATH_WITH_GARBAGE
+from tests.utils import DATA_PATH, DATA_PATH_WITH_GARBAGE
 
 def checker(name: str) -> bool:
     return name.endswith('.jpg') and re.match('\d_+\d', name) is not None
