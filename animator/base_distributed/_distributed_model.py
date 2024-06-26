@@ -48,13 +48,14 @@ class BaseDist(ABC):
         self.rank = rank
         self.world_size = params.world_size
         self.random_seed = random_state
-        self.generator = torch.Generator().manual_seed(random_state)
 
         # Set GPU number for this process
         if params.backend == 'nccl':
             self.device = torch.device(rank)
         else:
             self.device = torch.device('cpu')
+
+        self.generator = torch.Generator(device=self.device).manual_seed(random_state)
 
         # Setup the process group
         self.__setup(rank, params)

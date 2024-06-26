@@ -1,9 +1,8 @@
-name: trainDDP_styleTransfer
+name: train_dist_style_transfer
 desc: Script for training the cycleGAN model (Distributed Data Parallel)
 cmd: >
   python3 train.py
-  --dataset ${TRANSFER}/transfer
-  --prhome ${DS_PROJECT_HOME}
+  --dataset ${TRANSFER}/transform/
   --omodel ${OUTPUT_MODEL}
   --params ${PARAMS}
   --st ${RES_STORAGE}
@@ -11,15 +10,17 @@ env:
   python:
     type: manual
     version: 3.10.14
-    requirements-file: requirements.txt
+    requirements-file: ../../requirements.txt
     local-paths:
       - train.py
       - worker.py
-      - animator
+      - ../../animator
 datasets:
-  - bt1nnnteecjjh2dpnm68: TRANSFER
+  - bt1jpcru09mvorfon1gh: TRANSFER
 s3-mounts:
   - bt1osbecqjrq62ucvoec: RES_STORAGE
+inputs:
+  - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints: OUTPUT_MODEL
-cloud-instance-type: g1.2
+cloud-instance-type: gt4.1

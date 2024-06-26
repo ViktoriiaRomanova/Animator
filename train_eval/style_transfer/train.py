@@ -4,7 +4,7 @@ import torch.multiprocessing as mp
 
 from animator.utils.preprocessing_data import PreprocessingData
 from animator.utils.parameter_storages.params_holder import ParamsHolder
-from . import worker
+from worker import worker
 
 if __name__ == '__main__':
 

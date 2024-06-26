@@ -251,8 +251,8 @@ class ExtractionDistLearning(BaseDist):
                                    os.path.join(self.s3_storage, str(epoch) + '.pt'))
                     else:
                         # Otherwise, save at a remote machine
-                        warn('Intermediate model weights are saved at the remote machine and will be lost\
-                              after the end of the training process')
+                        warn(' '.join(('Intermediate model weights are saved at the remote machine and will be lost',
+                                       'after the end of the training process')))
                         torch.save(self.save_model(epoch),
                                    os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
 
