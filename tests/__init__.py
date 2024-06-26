@@ -1,3 +1,3 @@
 """Tests package."""
-DATA_PATH = 'tests/style_transfer/test_img'
+DATA_PATH = 'datasets/transform/'
 HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'

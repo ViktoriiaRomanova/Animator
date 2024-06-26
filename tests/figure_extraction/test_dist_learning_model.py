@@ -14,7 +14,10 @@ from animator.utils.parameter_storages.params_holder import ParamsHolder
 from animator.utils.parameter_storages.extraction_parameters import ExtTrainingParams
 from animator.utils.preprocessing_data import PreprocessingData
 from animator.figure_extraction.get_dataset import checker
-from tests.figure_extraction import DATA_PATH, MODEL_CHECKPOINTS, HYPERPARAMETERS
+from tests.figure_extraction import (DATA_PATH,
+                                    MODEL_CHECKPOINTS,
+                                    MODEL_WEIGHTS,
+                                    HYPERPARAMETERS)
 
 TIME_DATA_LOADING = 5.0
 TIME_MODEL_EXEC = 70
@@ -89,7 +92,8 @@ class MainTrainingPipelineTests(unittest.TestCase):
         base_param = Namespace(dataset = DATA_PATH,
                                omodel = MODEL_CHECKPOINTS,
                                imodel = None,
-                               params = HYPERPARAMETERS)
+                               params = HYPERPARAMETERS,
+                               st = None)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
             cls.holder = ParamsHolder('Extraction')
@@ -104,13 +108,13 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.distributed.backend = 'gloo'
 
         cls.params.data.data_part = 0.5
-        cls.params.data.sub_part_data = 0.4
+        cls.params.data.sub_part_data = 0.0008
 
         # test for two distributed process
         cls.params.distributed.world_size = 2
 
         cls.params.model.mtype = 'UNet'
-        cls.params.model.marchitecture = 'C'
+        cls.params.model.marchitecture = 'B'
 
         pr_data = PreprocessingData(cls.params.data.data_part, checker = checker)
         cls.train_data, cls.val_data = pr_data.get_data(os.path.join(cls.base_param.dataset, 'images'),
@@ -153,14 +157,14 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
-        self.base_param.imodel = 'tests/figure_extraction/test_weights/0.pt'
+        self.base_param.imodel = MODEL_WEIGHTS
 
         conn_queue = mp.Queue()
 
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        init_state = torch.load(self.base_param.imodel)
+        init_state = torch.load(self.base_param.imodel, map_location = 'cpu')
         # Erase the scaler state as it is not going to be loaded while the scaler is disabled
         # (this test works on CPU)
         init_state['scaler'] = {}       
@@ -187,7 +191,8 @@ class DistSamplerTests(unittest.TestCase):
         base_param = Namespace(dataset = DATA_PATH,
                                omodel = MODEL_CHECKPOINTS,
                                imodel = None,
-                               params = HYPERPARAMETERS)
+                               params = HYPERPARAMETERS,
+                               st = None)
 
         with unittest.mock.patch('argparse.ArgumentParser.parse_args', return_value = base_param):
             cls.holder = ParamsHolder('Extraction')

@@ -279,12 +279,12 @@ class DistLearning(BaseDist):
                                    os.path.join(self.s3_storage, str(epoch) + '.pt'))
                     else:
                         # Otherwise, save at a remote machine
-                        warn(''.join('Intermediate model weights are saved at the remote machine and will be lost',
-                                     'after the end of the training process'))
+                        warn(' '.join(('Intermediate model weights are saved at the remote machine and will be lost',
+                                       'after the end of the training process')))
                         torch.save(self.save_model(epoch),
                                    os.path.join(self.model_weights_dir, str(epoch) + '.pt'))               
-        if self.rank == 0:
-            # Save final results at s3 storage           
+        if self.rank == 0 and self.s3_storage is not None:
+            # Save final results at s3 storage          
             torch.save(self.save_model(epoch),
                        os.path.join(self.s3_storage, str(epoch) + '.pt'))
         dist.destroy_process_group()

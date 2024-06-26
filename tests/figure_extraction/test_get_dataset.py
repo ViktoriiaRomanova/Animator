@@ -18,10 +18,9 @@ class GetDatasetTests(unittest.TestCase):
         cls.img_shape = (3, 224, 224)
         cls.mask_shape = (1, 224, 224)
         pr_data = PreprocessingData(train_size = 0.8)
-        cls.train_img, cls.test_img = pr_data.get_data(os.path.join(DATA_PATH, 'images'), 10, 0.5)
+        cls.train_img, cls.test_img = pr_data.get_data(os.path.join(DATA_PATH, 'images'), 10, 0.0008)
         cls.mean = torch.tensor((0.485, 0.456, 0.406))
         cls.std = torch.tensor((0.229, 0.224, 0.225))
-
 
     @classmethod
     def tearDownClass(cls) -> None:

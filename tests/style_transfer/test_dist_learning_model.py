@@ -14,7 +14,7 @@ from animator.utils.parameter_storages.params_holder import ParamsHolder
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 from animator.utils.preprocessing_data import PreprocessingData
 from tests import DATA_PATH, HYPERPARAMETERS
-from tests.style_transfer import MODEL_CHECKPOINTS
+from tests.style_transfer import MODEL_CHECKPOINTS, MODEL_WEIGHTS
 
 TIME_DATA_LOADING = 10
 TIME_MODEL_EXEC = 100
@@ -92,7 +92,7 @@ class MainTrainingPipelineTests(unittest.TestCase):
         cls.params.distributed.backend = 'gloo'
 
         cls.params.data.data_part = 0.5
-        cls.params.data.sub_part_data = 0.4
+        cls.params.data.sub_part_data = 0.0008
 
         # test for two distributed process
         cls.params.distributed.world_size = 2
@@ -146,14 +146,14 @@ class MainTrainingPipelineTests(unittest.TestCase):
 
 
     def test_DistLearning_load_save_model(self,) -> None:
-        self.base_param.imodel = 'tests/style_transfer/test_weights/0.pt'
+        self.base_param.imodel = MODEL_WEIGHTS
 
         conn_queue = mp.Queue()
 
         context = mp.spawn(worker, args = (conn_queue, self.base_param, self.params, self.train_data, self.val_data),
                            join = False, nprocs = self.params.distributed.world_size)
 
-        init_state = torch.load(self.base_param.imodel)
+        init_state = torch.load(self.base_param.imodel, map_location = 'cpu')
         # Erase the scaler state as it is not going to be loaded while the scaler is disabled
         # (this test works on CPU)
         init_state['scaler'] = {}

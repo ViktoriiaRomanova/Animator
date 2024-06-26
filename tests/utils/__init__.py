@@ -1,3 +1,2 @@
-import os
-DATA_PATH = 'tests/utils/test_img'
-DATA_PATH_WITH_GARBAGE = os.path.join(os.getcwd(), 'tests/utils/test_img_to_clean')
+DATA_PATH = 'datasets/segmentation/images/'
+DATA_PATH_WITH_GARBAGE = 'datasets/test_img_to_clean'
