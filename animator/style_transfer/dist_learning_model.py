@@ -109,13 +109,14 @@ class DistLearning(BaseDist):
         self.epochs += self.start_epoch
 
         self.adv_loss = torch.compile(AdversarialLoss(params.loss.adversarial.ltype,
-                                                       params.loss.adversarial.real_val,
-                                                       params.loss.adversarial.fake_val))
+                                      params.loss.adversarial.real_val,
+                                      params.loss.adversarial.fake_val,
+                                      self.device))
         self.cycle_loss = torch.compile(CycleLoss(params.loss.cycle.ltype,
-                                                  params.loss.cycle.lambda_A,
-                                                  params.loss.cycle.lambda_B))
+                                        params.loss.cycle.lambda_A,
+                                        params.loss.cycle.lambda_B))
         self.idn_loss = torch.compile(IdentityLoss(params.loss.identity.ltype,
-                                                   params.loss.identity.lambda_idn))
+                                      params.loss.identity.lambda_idn))
 
         for model in self.models:
             model.compile()
@@ -235,7 +236,8 @@ class DistLearning(BaseDist):
             num_butch = min(len(self.train_loaderX), len(self.train_loaderY))
             self.models.train()
 
-            for x_batch, y_batch in tqdm(zip(self.train_loaderX, self.train_loaderY)):
+            for x_batch, y_batch in tqdm(zip(self.train_loaderX, self.train_loaderY),
+                                         total = min(len(self.train_loaderX), len(self.train_loaderY))):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
                 loss = self.forward_gen(x_batch, y_batch)
@@ -265,10 +267,6 @@ class DistLearning(BaseDist):
                                             'disc_B' : metrics[2].item()},
                                        'epoch': epoch})
                 
-                json_metrics = jdumps({'gens_loss' : metrics[0].item(),
-                                       'disc_A_loss' : metrics[1].item(),
-                                       'disc_B_loss' : metrics[2].item(),
-                                       'epoch': epoch})
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
             

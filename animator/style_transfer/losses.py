@@ -5,11 +5,13 @@ __all__ = ['AdversarialLoss', 'CycleLoss', 'IdentityLoss']
 # TO DO: add description everywhere 
 
 class AdversarialLoss(nn.Module):
-    def __init__(self, ltype: str = 'MSE', real_val: float = 1.0, fake_val: float = 0.0) -> None:
+    def __init__(self, ltype: str = 'MSE',
+                 real_val: float = 1.0, fake_val: float = 0.0,
+                 device: torch.device | str = 'cpu') -> None:
         super().__init__()
 
-        self.register_buffer('real', torch.tensor(real_val), persistent = False)
-        self.register_buffer('fake', torch.tensor(fake_val), persistent = False)
+        self.register_buffer('real', torch.tensor(real_val).to(device), persistent = False)
+        self.register_buffer('fake', torch.tensor(fake_val).to(device), persistent = False)
 
         if ltype == 'BCE':
             self.loss = nn.BCEWithLogitsLoss()

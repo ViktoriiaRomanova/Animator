@@ -5,11 +5,13 @@ from ._base_img_processing import BaseImgProcessing
 from typing import Callable
 
 class ModelImgProcessing(BaseImgProcessing):
-    def __init__(self, model: nn.Module , path: str, mode: str = 'mask', transform: Callable[[torch.tensor], torch.tensor] | None = None) -> None:
+    def __init__(self, model: nn.Module, model_name: str,
+                 path: str, mode: str = 'mask',
+                 transform: Callable[[torch.tensor], torch.tensor] | None = None) -> None:
         super().__init__()
         self.model = model
         self.transform = transform
-        state = torch.load(path, map_location = torch.device('cpu'))['model']
+        state = torch.load(path, map_location = torch.device('cpu'))[model_name]
         self.model.load_state_dict(state)
         self.model.eval()
         self.mode = mode
