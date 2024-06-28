@@ -2,8 +2,9 @@ name: train_dist_style_transfer
 desc: Script for training the cycleGAN model (Distributed Data Parallel)
 cmd: >
   python3 train.py
-  --dataset ${TRANSFORM}/transform/
+  --dataset ${TRANSFORM}/transfer_test/
   --omodel ${OUTPUT_MODEL}
+  --imodel ${IMODEL}
   --params ${PARAMS}
   --st ${RES_STORAGE}
 env:
@@ -16,10 +17,11 @@ env:
       - worker.py
       - ../../animator
 datasets:
-  - bt1jpcru09mvorfon1gh: TRANSFORM
+  - bt12nq8hucmb8tgocl1n: TRANSFORM
 s3-mounts:
   - bt1osbecqjrq62ucvoec: RES_STORAGE
 inputs:
+  - train_checkpoints/29.pt: IMODEL
   - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints: OUTPUT_MODEL

@@ -237,7 +237,7 @@ class DistLearning(BaseDist):
             self.models.train()
 
             for x_batch, y_batch in tqdm(zip(self.train_loaderX, self.train_loaderY),
-                                         total = min(len(self.train_loaderX), len(self.train_loaderY))):
+                                         total = num_butch):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
                 loss = self.forward_gen(x_batch, y_batch)

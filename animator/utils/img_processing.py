@@ -20,7 +20,7 @@ class ModelImgProcessing(BaseImgProcessing):
         if len(img) == 3:
             img = img.unsqueeze(0)
         with torch.no_grad():
-            if self.mode == 'mask':
+            if self.mode == 'simple':
                 img = self._conv_to_img(self.model(img), self.transform)
             elif self.mode == 'prune':
                 mask = self.model(img).permute((0, 2, 3, 1)) # get mask in format HxWxC
@@ -28,7 +28,7 @@ class ModelImgProcessing(BaseImgProcessing):
                 img = torch.cat((self._conv_to_img(img, self.transform),mask), dim=3)
             else:
                 raise NotImplementedError(
-                    'Mode type "{}" is not found, available modes are "mask" and "prune"'.format(self.mode)
+                    'Mode type "{}" is not found, available modes are "simple" and "prune"'.format(self.mode)
                     )
         return img
 

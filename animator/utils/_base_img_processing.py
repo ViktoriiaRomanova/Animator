@@ -14,7 +14,7 @@ class BaseImgProcessing(ABC):
         """Convert image to display."""
         if transform is not None:
             images = self.transform(images)
-        images.clip(0, 1)
+        images = images.clip(0, 1)
         return images
     
     @abstractmethod
