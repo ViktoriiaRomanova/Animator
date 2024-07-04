@@ -11,7 +11,7 @@
 
 '''
 import argparse
-from animator.utils.logger.create_summary_wrighter import Logger
+from .create_summary_wrighter import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', required = True, help = 'required path to stdout.txt file')

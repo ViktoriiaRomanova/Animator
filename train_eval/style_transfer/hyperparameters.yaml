@@ -12,7 +12,7 @@ data:
   std: [0.229, 0.224, 0.225]
 
 distributed:
-  world_size: 2  # Number of GPU/CPU
+  world_size: 1  # Number of GPU/CPU
   # Initialization the default distributed process group
   backend: 'nccl' # 'nccl' -- for GPU, 'gloo' for CPU
   port: '12345'
@@ -20,13 +20,13 @@ distributed:
 
 optimizers:
   gen:
-    lr: 0.0002
+    lr: 0.00002
     betas: [0.5, 0.999]
   discA:
-    lr: 0.0002
+    lr: 0.00002
     betas: [0.5, 0.999]
   discB:
-    lr: 0.0002
+    lr: 0.00002
     betas: [0.5, 0.999]
 
 models:
