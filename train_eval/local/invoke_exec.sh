@@ -29,12 +29,13 @@ IMODEL=train_checkpoints/
 PARAMS=hyperparameters.yaml
 
 # Automatic move of the necessary data
-#scp ../stryle_transfer/train.py remote_machine:$MY_REMOTE_DIR # train
-#scp ../stryle_transfer/worker.py remote_machine:$MY_REMOTE_DIR # worker
-#scp -r ../../animator remote_machine:$MY_REMOTE_DIR # animator package
-#scp ../stryle_transfer/hyperparameters.py remote_machine:$MY_REMOTE_DIR # hyperparameters
-#scp -r ../../datasets/transform/ remote_machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
-#scp ../stryle_transfer/train_checkpoints/129.py remote_machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
+#scp ../style_transfer/train.py remote-machine:$MY_REMOTE_DIR # train
+#scp ../style_transfer/worker.py remote-machine:$MY_REMOTE_DIR # worker
+#scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
+echo $(dirname "$0")
+scp ../style_transfer/hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
+#scp -r ../../datasets/transform/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
+#scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
 
 docker --context remote-machine run --name animator \
 --mount type=bind,source="$MY_REMOTE_DIR",target=/workspace \

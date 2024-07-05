@@ -47,7 +47,12 @@ class Logger:
                 if not line:
                     time.sleep(self.sleep)
                 else:
-                    metrics = jloads(line)
+                    # Check if the line is json format 
+                    # based on EAFP(https://docs.python.org/2/glossary.html#term-eafp)
+                    try:
+                        metrics = jloads(line)
+                    except ValueError:
+                        continue
                     for main_tag in metrics:
                         if main_tag == 'epoch': continue
                         self.writer.add_scalars(main_tag, metrics[main_tag], metrics['epoch'])
