@@ -89,6 +89,13 @@ class DistLearning(BaseDist):
                                             lr = params.optimizers.discB.lr,
                                             betas = params.optimizers.discB.betas)
         
+        def lambda_rule(epoch: int) -> float:
+            return (1.0 - (epoch - 100.0) / 101.0) if epoch > 100 else 1.0 
+        
+        self.scheduler_gen = torch.optim.lr_scheduler.LambdaLR(self.optim_gen, lr_lambda=lambda_rule)
+        self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
+        self.scheduler_discB = torch.optim.lr_scheduler.LambdaLR(self.optim_discB, lr_lambda=lambda_rule)
+        
         self.save_load_params = {'genA': self.genA,
                                  'discA': self.discA,
                                  'genB': self.genB,
@@ -96,7 +103,10 @@ class DistLearning(BaseDist):
                                  'optim_gen': self.optim_gen,
                                  'optim_discA': self.optim_discA,
                                  'optim_discB': self.optim_discB,
-                                 'scaler': self.scaler}
+                                 'scaler': self.scaler,
+                                 'scheduler_gen': self.scheduler_gen,
+                                 'scheduler_discA': self.scheduler_discA,
+                                 'scheduler_discB': self.scheduler_discB}
         
         if init_args.imodel is None:
             # Initialze model weights with Gaussian distribution
@@ -127,6 +137,9 @@ class DistLearning(BaseDist):
         state = torch.load(weights_dir, map_location = device)
 
         for key, param in self.save_load_params.items():
+            if key not in state:
+                warn('Loaded state dict doesn`t contain {} its loading omitted'.format(key))
+                continue
             if isinstance(param, nn.Module):
                 param.module.load_state_dict(state[key])
             else:
@@ -251,6 +264,10 @@ class DistLearning(BaseDist):
                 avg_loss_disc_B += (loss_disc_B / num_butch).detach()
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
+            
+            self.scheduler_gen.step()
+            self.scheduler_discA.step()
+            self.scheduler_discB.step()
 
             self.models.eval()
             # Share metrics
@@ -263,8 +280,14 @@ class DistLearning(BaseDist):
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
                 json_metrics = jdumps({'Loss': 
                                             {'gens' : metrics[0].item(),
-                                            'disc_A' : metrics[1].item(),
-                                            'disc_B' : metrics[2].item()},
+                                             'disc_A' : metrics[1].item(),
+                                             'disc_B' : metrics[2].item()
+                                            },
+                                        'Lr':
+                                            {'gens': self.scheduler_gen.get_last_lr(),
+                                             'discA': self.scheduler_discA.get_last_lr(),
+                                             'discB': self.scheduler_discB.get_last_lr()
+                                            },
                                        'epoch': epoch})
                 
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
