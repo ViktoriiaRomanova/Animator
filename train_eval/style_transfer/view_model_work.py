@@ -10,7 +10,7 @@ from animator.utils.img_processing import ImgProcessing, ModelImgProcessing
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'
-MODEL_WEIGHTS = 'train_eval/style_transfer/train_checkpoints/169.pt'
+MODEL_WEIGHTS = 'train_eval/style_transfer/train_checkpoints/184.pt'
 #IMG_PATH = 'datasets/transform/domainX'
 IMG_PATH = '/home/viktoriia/Downloads/transfer_test/domainX'
 

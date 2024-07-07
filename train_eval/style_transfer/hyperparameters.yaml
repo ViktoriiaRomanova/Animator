@@ -1,7 +1,7 @@
 main: 
   random_state: 10
   batch_size: 1
-  epochs: 1
+  epochs: 3
   buffer_size: 50 # Size of the buffer to store generated images
 
 data:
@@ -20,13 +20,13 @@ distributed:
 
 optimizers:
   gen:
-    lr: 0.00002
+    lr: 0.0002
     betas: [0.5, 0.999]
   discA:
-    lr: 0.00002
+    lr: 0.0002
     betas: [0.5, 0.999]
   discB:
-    lr: 0.00002
+    lr: 0.0002
     betas: [0.5, 0.999]
 
 models:

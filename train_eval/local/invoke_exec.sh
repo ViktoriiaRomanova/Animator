@@ -32,7 +32,6 @@ PARAMS=hyperparameters.yaml
 #scp ../style_transfer/train.py remote-machine:$MY_REMOTE_DIR # train
 #scp ../style_transfer/worker.py remote-machine:$MY_REMOTE_DIR # worker
 #scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
-echo $(dirname "$0")
 scp ../style_transfer/hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
 #scp -r ../../datasets/transform/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
@@ -46,7 +45,7 @@ docker --context remote-machine run --name animator \
 python3 train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
---imodel ${IMODEL}/2024_07_03_06_52_53/129.pt \
+--imodel ${IMODEL}/169.pt \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
 
