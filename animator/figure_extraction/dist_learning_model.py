@@ -1,7 +1,6 @@
 import os
 from argparse import Namespace
 from json import dumps as jdumps
-import shutil
 from warnings import warn
 
 import torch
@@ -100,7 +99,7 @@ class ExtractionDistLearning(BaseDist):
         self.metric_train = JaccardIndex('binary',
                                          threshold = params.metrics.threshhold).to(self.device)
         self.metric_eval = JaccardIndex('binary',
-                                         threshold = params.metrics.threshhold).to(self.device)
+                                        threshold = params.metrics.threshhold).to(self.device)
         self.metric_train.compile()
         self.metric_eval.compile()
 
@@ -207,7 +206,6 @@ class ExtractionDistLearning(BaseDist):
             train_metric = self.metric_train.compute()
             self.metric_train.reset()
 
-
             self.model.eval()
             val_loss = 0
             with torch.no_grad():
@@ -251,14 +249,14 @@ class ExtractionDistLearning(BaseDist):
                                    os.path.join(self.s3_storage, str(epoch) + '.pt'))
                     else:
                         # Otherwise, save at a remote machine
-                        warn(' '.join(('Intermediate model weights are saved at the remote machine and will be lost',
-                                       'after the end of the training process')))
+                        warn(' '.join(('Intermediate model weights are saved at the remote machine',
+                                       'and will be lost after the end of the training process')))
                         torch.save(self.save_model(epoch),
                                    os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
 
         if self.rank == 0:
             # Save the result model with the same folder name as on a remote machine
-            path =  os.path.join(self.init_args.omodel, os.path.basename(self.model_weights_dir))
+            path = os.path.join(self.init_args.omodel, os.path.basename(self.model_weights_dir))
             os.makedirs(path)
             torch.save(self.save_model(epoch),
                        os.path.join(path, str(self.epochs - 1) + '.pt'))

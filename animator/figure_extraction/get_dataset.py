@@ -1,4 +1,6 @@
+"""Classes and functions to prepare data."""
 import os
+from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -48,18 +50,21 @@ class MaskDataset(Dataset, _bp.BaseDataset):
             image, mask = torch.tensor_split(both, [3], dim = 0)
         return image, mask
 
+
 def checker(name_: str) -> bool:
+    """Check if a file is fitting."""
     forbidden = {'ds7_pexels-photo-842569.png', 'ds7_pexels-photo-724887.png'}
-    return name_ not in forbidden # and name_.endswith('.png')
+    return name_ not in forbidden  # and name_.endswith('.png')
 
-def get_data(data_path: str, checker = checker) -> list[str]:
-        """Collect data."""
-        filenames = []
-        for name_ in os.listdir(data_path):
-            if checker(name_):
-                filenames.append(name_)
 
-        return filenames
+def get_data(data_path: str, checker: Callable[[str], bool] = checker) -> list[str]:
+    """Collect data."""
+    filenames = []
+    for name_ in os.listdir(data_path):
+        if checker(name_):
+            filenames.append(name_)
+
+    return filenames
 
 
 def get_not_rgb_pic(data: MaskDataset) -> set[int]:
