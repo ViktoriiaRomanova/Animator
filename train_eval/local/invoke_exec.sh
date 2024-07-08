@@ -45,7 +45,6 @@ docker --context remote-machine run --name animator \
 python3 train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
---imodel ${IMODEL}/169.pt \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
 

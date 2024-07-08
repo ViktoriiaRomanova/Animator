@@ -5,11 +5,8 @@ set -e
 # to store execution data in the same directory
 cd $(dirname "$0")
 
-if [ ! -d /tmp/animator/ ]; then
-mkdir /tmp/animator/
-fi
-
-nohup docker --context remote-machine logs -f animator 1>tmp/stdout.txt 2>/dev/null &
+# Get path of the last created log
+LOGS_PATH=$(find /tmp/datasphere/ -type d -printf '%T@ %p\n' | sort -k1,1nr | head -1 | awk '{print $2}')
 echo "Automatic logs collection was started"
 echo "Run VScode tensorboard to visualize them (Ctrl + Shift + P -> Python: Launch TensorBoard)"
-nohup python3 -m animator.utils.logs.logger --path /tmp/animator/stdout.txt >/tmp/animator/nohup.out 2>&1 &
+nohup python3 -m animator.utils.logs.logger --path $LOGS_PATH/stdout.txt >/tmp/nohup.out 2>&1 &
