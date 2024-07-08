@@ -3,12 +3,13 @@ import os
 import torch.nn as nn
 from torch import tensor
 from torch.utils.data import Dataset
-from torchvision import transforms
 from torchvision import io
+from torchvision import transforms
 
 from ..utils import _base_preprocessing_data as _bp
 
 __all__ = ['PostProcessingDataset']
+
 
 class PostProcessingDataset(Dataset, _bp.BaseDataset):
     """Prepare data for DataLoader to load in trained model."""
@@ -19,17 +20,22 @@ class PostProcessingDataset(Dataset, _bp.BaseDataset):
                  std: tuple[float, float, float],
                  transform: nn.Module | transforms.Compose | None = None) -> None:
         """
+            Map-style Dataset.
+
             Args:
-                * dataset directory,
-                * list of filenames,
-                * picture transformation.
+                img_dir - dataset directory,
+                data - list of filenames,
+                size - resulted size,
+                mean - image mean,
+                std - image standard deviation,
+                transform - picture transformation.
         """
         super().__init__(img_dir, data, transform, size, mean, std)
 
     def __getitem__(self, idx: int) -> tensor:
         """Return image/transformed image by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
-        
+
         image = io.read_image(img_path)
         image = transforms.functional.center_crop(image, output_size = max(image.shape))
         image = self.norm(self.to_resized_tensor(image).div(255))
