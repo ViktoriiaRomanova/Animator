@@ -1,7 +1,7 @@
 main: 
   random_state: 10
   batch_size: 1
-  epochs: 200
+  epochs: 10
   buffer_size: 50 # Size of the buffer to store generated images
 
 data:
@@ -31,9 +31,10 @@ optimizers:
 
 models:
   # If pretrained model wasn't loaded 
-  # Initialze model weights with Gaussian distribution N(0, 0.2)
-  mean: 0.0
-  std: 0.2
+  # Initialze model weights with Gaussian distribution N(0, 0.02) or Kaiming
+  init_type: 'kaiming'
+  #mean: 0.0
+  #std: 0.02
 
 loss:
   adversarial:

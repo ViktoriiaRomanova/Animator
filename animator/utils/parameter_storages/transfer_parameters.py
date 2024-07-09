@@ -1,3 +1,5 @@
+from typing import Optional
+
 from dataclasses import dataclass
 from ._nested_dataclass import nested_dataclass
 
@@ -35,8 +37,9 @@ class AllOptimParams:
 
 @dataclass(kw_only = True)
 class ModelParams:
-    mean: float
-    std: float
+    init_type: str
+    mean: Optional[float] = None
+    std: Optional[float] = None
 
 @dataclass(kw_only = True)
 class MainParams:

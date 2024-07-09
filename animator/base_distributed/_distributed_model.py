@@ -88,12 +88,23 @@ class BaseDist(ABC):
 
         return model_weights_dir
 
-    def _init_weights(self, module: nn.Module, mean: float, std: float) -> None:
+    def _init_weights(self, module: nn.Module, init_type: str, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
         def init_func(sub_mod: nn.Module) -> None:
-            module_to_init = {nn.Conv2d, nn.Linear, nn.BatchNorm2d}
+            module_to_init = {nn.Conv2d, nn.Linear}
             if type(sub_mod) in module_to_init:
-                nn.init.normal_(sub_mod.weight, mean, std, self.generator)
+                if init_type == 'normal':
+                    nn.init.normal_(sub_mod.weight, mean, std, self.generator)
+                elif init_type == 'kaiming':
+                    nn.init.kaiming_normal_(sub_mod.weight,
+                                            a = 0,
+                                            mode = 'fan_in',
+                                            generator = self.generator)
+                else:
+                    raise NotImplementedError('Initialization method {} is not implemented'.format(init_type))
+                nn.init.constant_(sub_mod.bias, 0.0)
+            elif isinstance(sub_mod, nn.BatchNorm2d):
+                nn.init.normal_(sub_mod.weight, 1.0, std, self.generator)
                 nn.init.constant_(sub_mod.bias, 0.0)
 
         module.apply(init_func)

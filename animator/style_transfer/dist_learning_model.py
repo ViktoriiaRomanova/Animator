@@ -111,7 +111,7 @@ class DistLearning(BaseDist):
         if init_args.imodel is None:
             # Initialze model weights with Gaussian distribution
             self.start_epoch = 0
-            self._init_weights(self.models, mean = params.models.mean,
+            self._init_weights(self.models, init_type = params.models.init_type, mean = params.models.mean,
                                std = params.models.std)
         else:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
