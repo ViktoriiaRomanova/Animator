@@ -1,11 +1,11 @@
 main: 
   random_state: 10
   batch_size: 1
-  epochs: 10
+  epochs: 200
   buffer_size: 50 # Size of the buffer to store generated images
 
 data:
-  data_part: 0.9 # Proportions to split data for train and evaluation
+  data_part: 0.99 # Proportions to split data for train and evaluation
   sub_part_data: 1.0 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
   size: [256, 256]
   mean: [0.485, 0.456, 0.406]

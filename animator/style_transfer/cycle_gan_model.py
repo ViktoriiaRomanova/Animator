@@ -51,7 +51,7 @@ class Generator(nn.Module):
 
         out_ch = 3
         layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 7, stride = 1, padding = 3, padding_mode = 'reflect', bias = True),
-                   nn.InstanceNorm2d(out_ch),
+                   #nn.InstanceNorm2d(out_ch),
                    nn.Tanh()]
         
         self.model = nn.Sequential(*layers)

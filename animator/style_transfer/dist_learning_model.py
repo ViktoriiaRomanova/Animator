@@ -74,7 +74,7 @@ class DistLearning(BaseDist):
 
         self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
-        self.scaler = torch.cuda.amp.GradScaler(enabled = self.device.type == 'cuda')
+        self.scaler = torch.cuda.amp.GradScaler(enabled = False) # self.device.type == 'cuda')
 
         self.fake_Y_buffer = ImageBuffer(params.main.buffer_size)
         self.fake_X_buffer = ImageBuffer(params.main.buffer_size)
@@ -183,7 +183,7 @@ class DistLearning(BaseDist):
 
         with torch.autocast(device_type = self.device.type,
                             dtype = torch.float16,
-                            enabled = self.device.type == 'cuda'):
+                            enabled = False): # self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, False)
 
             fakeY = self.genA(X)
@@ -205,7 +205,7 @@ class DistLearning(BaseDist):
 
         with torch.autocast(device_type = self.device.type,
                             dtype = torch.float16,
-                            enabled = self.device.type == 'cuda'):
+                            enabled = False): #self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, True)
 
             ans_disc_A = self.discA(self.fake_Y_buffer.get())

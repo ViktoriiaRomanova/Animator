@@ -23,7 +23,7 @@ set -e
 # Move to script directory
 cd $(dirname "$0")
 
-TRANSFORM=datasets/transfer_test/
+TRANSFORM=datasets/transfer_test1/
 OUTPUT_MODEL=train_checkpoints/
 IMODEL=train_checkpoints/
 PARAMS=hyperparameters.yaml
