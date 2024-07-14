@@ -10,6 +10,9 @@ def dict_factory(args) -> dict:
     for key, val in args:
         if isinstance(val, tuple):
             res[key] = list(val)
+        elif val is None:
+            # Omit optional parameters
+            pass
         else:
             res[key] = val
     return res

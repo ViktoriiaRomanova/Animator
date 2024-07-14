@@ -61,10 +61,22 @@ class DistLearning(BaseDist):
                                                     self.random_seed)
 
         # Create forward(A) and reverse(B) models
-        self.genA = self._ddp_wrapper(Generator().to(self.device))
-        self.genB = self._ddp_wrapper(Generator().to(self.device))
-        self.discA = self._ddp_wrapper(Discriminator().to(self.device))
-        self.discB = self._ddp_wrapper(Discriminator().to(self.device))
+        # and initialize weights with Gaussian or Kaiming distribution
+        self.genA = Generator().to(self.device)
+        self.genB = Generator().to(self.device)
+
+        self.discA = Discriminator().to(self.device)
+        self.discB = Discriminator().to(self.device)
+
+        self._init_weights(nn.ModuleList([self.genA, self.genB, self.discA, self.discB]),
+                           init_type = params.models.init_type,
+                           mean = params.models.mean,
+                           std = params.models.std)
+
+        self.genA = self._ddp_wrapper(self.genA)
+        self.genB = self._ddp_wrapper(self.genB)
+        self.discA = self._ddp_wrapper(self.discA)
+        self.discB = self._ddp_wrapper(self.discB)
 
         self.modelA = nn.ModuleList([self.genA, self.discA])
         self.modelB = nn.ModuleList([self.genB, self.discB])
@@ -90,7 +102,7 @@ class DistLearning(BaseDist):
                                             betas = params.optimizers.discB.betas)
         
         def lambda_rule(epoch: int) -> float:
-            return (1.0 - (epoch - 100.0) / 101.0) if epoch > 100 else 1.0 
+            return (1.0 - (epoch - 200.0) / 201.0) if epoch > 200 else 1.0 
         
         self.scheduler_gen = torch.optim.lr_scheduler.LambdaLR(self.optim_gen, lr_lambda=lambda_rule)
         self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
@@ -108,12 +120,8 @@ class DistLearning(BaseDist):
                                  'scheduler_discA': self.scheduler_discA,
                                  'scheduler_discB': self.scheduler_discB}
         
-        if init_args.imodel is None:
-            # Initialze model weights with Gaussian distribution
-            self.start_epoch = 0
-            self._init_weights(self.models, init_type = params.models.init_type, mean = params.models.mean,
-                               std = params.models.std)
-        else:
+        self.start_epoch = 0
+        if init_args.imodel is not None:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         
         self.epochs += self.start_epoch

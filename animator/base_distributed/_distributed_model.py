@@ -94,17 +94,16 @@ class BaseDist(ABC):
             module_to_init = {nn.Conv2d, nn.Linear}
             if type(sub_mod) in module_to_init:
                 if init_type == 'normal':
-                    nn.init.normal_(sub_mod.weight, mean, std, self.generator)
+                    nn.init.normal_(sub_mod.weight, mean, std)
                 elif init_type == 'kaiming':
                     nn.init.kaiming_normal_(sub_mod.weight,
                                             a = 0,
-                                            mode = 'fan_in',
-                                            generator = self.generator)
+                                            mode = 'fan_in')
                 else:
                     raise NotImplementedError('Initialization method {} is not implemented'.format(init_type))
                 nn.init.constant_(sub_mod.bias, 0.0)
             elif isinstance(sub_mod, nn.BatchNorm2d):
-                nn.init.normal_(sub_mod.weight, 1.0, std, self.generator)
+                nn.init.normal_(sub_mod.weight, 1.0, std)
                 nn.init.constant_(sub_mod.bias, 0.0)
 
         module.apply(init_func)
