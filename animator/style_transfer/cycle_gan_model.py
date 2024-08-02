@@ -45,13 +45,14 @@ class Generator(nn.Module):
         # Add upsampling
         for _ in range(2):
             layers += [nn.ConvTranspose2d(in_ch, out_ch, kernel_size = 3, stride = 2, padding = 1, output_padding = 1),
+                       #nn.Upsample(scale_factor=2, mode='bilinear'),
+                       #nn.Conv2d(in_ch, out_ch, kernel_size = 3, stride = 1, padding = 1, padding_mode = 'reflect', bias = True),
                        nn.InstanceNorm2d(out_ch),
                        nn.ReLU(True)]
             in_ch, out_ch = out_ch, out_ch // 2
 
         out_ch = 3
         layers += [nn.Conv2d(in_ch, out_ch, kernel_size = 7, stride = 1, padding = 3, padding_mode = 'reflect', bias = True),
-                   #nn.InstanceNorm2d(out_ch),
                    nn.Tanh()]
         
         self.model = nn.Sequential(*layers)

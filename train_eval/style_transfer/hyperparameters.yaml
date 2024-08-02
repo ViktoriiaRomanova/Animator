@@ -1,15 +1,15 @@
 main: 
   random_state: 10
   batch_size: 1
-  epochs: 400
+  epochs: 200
   buffer_size: 50 # Size of the buffer to store generated images
 
 data:
-  data_part: 0.99 # Proportions to split data for train and evaluation
-  sub_part_data: 1.0 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
+  data_part: 0.999 # Proportions to split data for train and evaluation
+  sub_part_data: 1 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
   size: [256, 256]
-  mean: [0.485, 0.456, 0.406]
-  std: [0.229, 0.224, 0.225]
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
 
 distributed:
   world_size: 1  # Number of GPU/CPU
@@ -32,9 +32,9 @@ optimizers:
 models:
   # If pretrained model wasn't loaded 
   # Initialze model weights with Gaussian distribution N(0, 0.02) or Kaiming
-  init_type: 'kaiming'
-  #mean: 0.0
-  #std: 0.02
+  init_type: 'normal'
+  mean: 0.0
+  std: 0.02
 
 loss:
   adversarial:
@@ -50,4 +50,4 @@ loss:
 
   identity:
     ltype: 'L1'
-    lambda_idn: 0.5
+    lambda_idn: 5

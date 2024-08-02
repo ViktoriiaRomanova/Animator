@@ -91,7 +91,7 @@ class BaseDist(ABC):
     def _init_weights(self, module: nn.Module, init_type: str, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
         def init_func(sub_mod: nn.Module) -> None:
-            module_to_init = {nn.Conv2d, nn.Linear}
+            module_to_init = {nn.Conv2d, nn.Linear, nn.ConvTranspose2d}
             if type(sub_mod) in module_to_init:
                 if init_type == 'normal':
                     nn.init.normal_(sub_mod.weight, mean, std)

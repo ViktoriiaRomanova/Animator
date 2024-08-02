@@ -23,7 +23,7 @@ set -e
 # Move to script directory
 cd $(dirname "$0")
 
-TRANSFORM=datasets/transfer_test1/
+TRANSFORM=datasets/transfer_test2/
 OUTPUT_MODEL=train_checkpoints/
 IMODEL=train_checkpoints/
 PARAMS=hyperparameters.yaml
@@ -31,7 +31,7 @@ PARAMS=hyperparameters.yaml
 # Automatic move of the necessary data
 #scp ../style_transfer/train.py remote-machine:$MY_REMOTE_DIR # train
 #scp ../style_transfer/worker.py remote-machine:$MY_REMOTE_DIR # worker
-#scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
+scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
 scp ../style_transfer/hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
 #scp -r ../../datasets/transform/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)

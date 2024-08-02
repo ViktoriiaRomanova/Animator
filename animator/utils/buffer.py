@@ -1,21 +1,19 @@
 import torch
 from random import randint, uniform
+from collections import deque
 
 class ImageBuffer():
-    def __init__(self, size: int = 50) -> None:
+    def __init__(self, generator: torch.Generator, size: int = 50) -> None:
         if size == 0:
             raise ValueError('size should be bigger than 0')
 
         self.size = size
-        self.ind = -1
         self.storage = []
         self.buffer = None
+        self.generator = generator
+        self.queue = deque()
 
     def add(self, img: torch.Tensor) -> None:
-        if self.ind + 1 < self.size:
-            self.ind += 1
-        else:
-            self.ind = 0
         self.buffer = img
     
     def get(self,) -> torch.Tensor:
@@ -25,18 +23,19 @@ class ImageBuffer():
         '''
         if self.buffer is None:
             raise RuntimeError('method "add" should be called before "get"')
-        prob = uniform(0, 1)
+        # Get random number from uniform distribution on the interval [0, 1)
+        prob = torch.rand(1, generator = self.generator).item()
         img = self.buffer
-        if prob > 0.5 and len(self.storage) > 0:                 
-            ind = randint(0, len(self.storage) - 1)
+        if prob > 0.5 and len(self.storage) == self.size:                 
+            ind = torch.randint(0, len(self.storage), (1,), generator = self.generator).item()
             img = self.storage[ind]
-
-        if self.ind == len(self.storage):
+            self.storage[ind] = self.buffer
+            self.queue.append(ind)
+        elif len(self.storage) < self.size:
             self.storage.append(self.buffer)
-        else:
-            self.storage[self.ind] = self.buffer
+            self.queue.append(ind)
         self.buffer = None
-        return img  
-
-
-
+        return img
+     
+    def step():
+        "Unfinished: values change and initial index fill logic"

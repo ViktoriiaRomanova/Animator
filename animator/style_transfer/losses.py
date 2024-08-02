@@ -42,8 +42,10 @@ class CycleLoss(nn.Module):
     
     def __call__(self, obtained_X: torch.Tensor, obtained_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
-        return self.loss(obtained_X, real_X) * self.lambda_A + \
-             + self.loss(obtained_Y, real_Y) * self.lambda_B
+        #return self.loss(obtained_X, real_X) * self.lambda_A + \
+            # + self.loss(obtained_Y, real_Y) * self.lambda_B
+        return (self.loss(obtained_X, real_X) * self.lambda_A,
+               self.loss(obtained_Y, real_Y) * self.lambda_B)
 
 class IdentityLoss(nn.Module):
     def __init__(self, ltype: str = 'L1', lambda_idn: float = 0.5) -> None:
@@ -56,4 +58,5 @@ class IdentityLoss(nn.Module):
 
     def __call__(self, obtained_from_X: torch.Tensor, obtained_from_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
-        return (self.loss(obtained_from_X, real_X) + self.loss(obtained_from_Y, real_Y)) * self.lambda_idn * 10
+        #return (self.loss(obtained_from_X, real_X) + self.loss(obtained_from_Y, real_Y)) * self.lambda_idn
+        return self.loss(obtained_from_X, real_X) * self.lambda_idn, self.loss(obtained_from_Y, real_Y) * self.lambda_idn

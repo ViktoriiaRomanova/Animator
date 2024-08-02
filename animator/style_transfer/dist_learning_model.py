@@ -17,6 +17,7 @@ from ..utils.buffer import ImageBuffer
 from .get_dataset import GetDataset
 from ..utils.parameter_storages.transfer_parameters import TrainingParams
 
+
 __all__ = ['DistLearning']
 
 class DistLearning(BaseDist):
@@ -50,7 +51,8 @@ class DistLearning(BaseDist):
         train_setY = GetDataset(datasetY, train_data[1],
                                size = params.data.size,
                                mean = params.data.mean,
-                               std = params.data.std)
+                               std = params.data.std,
+                               rand_mode = True)
         
         self.train_loaderX = self.prepare_dataloader(train_setX, rank,
                                                     self.world_size, self.batch_size, 
@@ -62,21 +64,21 @@ class DistLearning(BaseDist):
 
         # Create forward(A) and reverse(B) models
         # and initialize weights with Gaussian or Kaiming distribution
-        self.genA = Generator().to(self.device)
-        self.genB = Generator().to(self.device)
+        self.genA = Generator()
+        self.genB = Generator()
 
-        self.discA = Discriminator().to(self.device)
-        self.discB = Discriminator().to(self.device)
+        self.discA = Discriminator()
+        self.discB = Discriminator()
 
         self._init_weights(nn.ModuleList([self.genA, self.genB, self.discA, self.discB]),
                            init_type = params.models.init_type,
                            mean = params.models.mean,
                            std = params.models.std)
 
-        self.genA = self._ddp_wrapper(self.genA)
-        self.genB = self._ddp_wrapper(self.genB)
-        self.discA = self._ddp_wrapper(self.discA)
-        self.discB = self._ddp_wrapper(self.discB)
+        self.genA = self._ddp_wrapper(self.genA.to(self.device))
+        self.genB = self._ddp_wrapper(self.genB.to(self.device))
+        self.discA = self._ddp_wrapper(self.discA.to(self.device))
+        self.discB = self._ddp_wrapper(self.discB.to(self.device))
 
         self.modelA = nn.ModuleList([self.genA, self.discA])
         self.modelB = nn.ModuleList([self.genB, self.discB])
@@ -102,7 +104,7 @@ class DistLearning(BaseDist):
                                             betas = params.optimizers.discB.betas)
         
         def lambda_rule(epoch: int) -> float:
-            return (1.0 - (epoch - 200.0) / 201.0) if epoch > 200 else 1.0 
+            return (1.0 - (epoch - 100.0) / 101.0) if epoch > 100 else 1.0 
         
         self.scheduler_gen = torch.optim.lr_scheduler.LambdaLR(self.optim_gen, lr_lambda=lambda_rule)
         self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
@@ -126,18 +128,20 @@ class DistLearning(BaseDist):
         
         self.epochs += self.start_epoch
 
-        self.adv_loss = torch.compile(AdversarialLoss(params.loss.adversarial.ltype,
+        #self.adv_test = AdversarialLoss('BCE', device=self.device)
+
+        self.adv_loss = AdversarialLoss(params.loss.adversarial.ltype,
                                       params.loss.adversarial.real_val,
                                       params.loss.adversarial.fake_val,
-                                      self.device))
-        self.cycle_loss = torch.compile(CycleLoss(params.loss.cycle.ltype,
+                                      self.device)
+        self.cycle_loss = CycleLoss(params.loss.cycle.ltype,
                                         params.loss.cycle.lambda_A,
-                                        params.loss.cycle.lambda_B))
-        self.idn_loss = torch.compile(IdentityLoss(params.loss.identity.ltype,
-                                      params.loss.identity.lambda_idn))
+                                        params.loss.cycle.lambda_B)
+        self.idn_loss = IdentityLoss(params.loss.identity.ltype,
+                                      params.loss.identity.lambda_idn)
 
-        for model in self.models:
-            model.compile()
+        #for model in self.models:
+            #model.compile()
 
     def load_model(self, path: str, device: torch.device) -> int:
         working_directory = os.getcwd()
@@ -191,7 +195,7 @@ class DistLearning(BaseDist):
 
         with torch.autocast(device_type = self.device.type,
                             dtype = torch.float16,
-                            enabled = False): # self.device.type == 'cuda'):
+                            enabled = False): #self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, False)
 
             fakeY = self.genA(X)
@@ -202,11 +206,16 @@ class DistLearning(BaseDist):
             self.fake_X_buffer.add(fakeX.detach())
             self.fake_Y_buffer.add(fakeY.detach())
 
-            loss = self.adv_loss(self.discB(fakeX), True) + self.adv_loss(self.discA(fakeY), True) + \
-                + self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
-                + self.idn_loss(self.genB(X), self.genA(Y), X, Y)
-        
-        return loss
+            adv_lossA = self.adv_loss(self.discA(fakeY), True)
+            adv_lossB = self.adv_loss(self.discB(fakeX), True)
+            cycle_lossA, cycle_lossB = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
+            idn_lossX, idn_lossY = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+
+            #loss = self.adv_loss(self.discB(fakeX), True) + self.adv_loss(self.discA(fakeY), True) + \
+                #+ self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y) + \
+                #+ self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+            loss = adv_lossA + adv_lossB + cycle_lossA + cycle_lossB + idn_lossX + idn_lossY
+        return loss, adv_lossA, adv_lossB, cycle_lossA, cycle_lossB, idn_lossX, idn_lossY
 
     def forward_disc(self, X: torch.Tensor, Y: torch.Tensor,
                      adv_alpha: float = 0.5) -> tuple[torch.Tensor, torch.Tensor]:
@@ -217,16 +226,26 @@ class DistLearning(BaseDist):
             self.set_requires_grad(self.discs, True)
 
             ans_disc_A = self.discA(self.fake_Y_buffer.get())
-            ans_disc_B = self.discB(self.fake_X_buffer.get()) 
+            ans_disc_B = self.discB(self.fake_X_buffer.get())
 
-            lossA = adv_alpha * (self.adv_loss(ans_disc_A, False) + \
-                + self.adv_loss(Y, True))
+            #false_loss = self.adv_test(ans_disc_A, False)
+            #true_loss = self.adv_test(Y, True)
+            lossA_true = self.adv_loss(self.discA(Y), True) * adv_alpha
+            lossA_false = adv_alpha * self.adv_loss(ans_disc_A, False)
+            #lossA = adv_alpha * (self.adv_loss(ans_disc_A, False) + \
+                #+ self.adv_loss(self.discA(Y), True))
+            lossA = lossA_true + lossA_false
+            
+            #acc = (int(false_loss < 0.5) + int(true_loss > 0.5)) / 2
 
-            lossB = adv_alpha * (self.adv_loss(ans_disc_B, False) + \
-                + self.adv_loss(X, True))
+            lossB_true = self.adv_loss(self.discB(X), True) * adv_alpha
+            lossB_false = adv_alpha * self.adv_loss(ans_disc_B, False)
+            #lossB = adv_alpha * (self.adv_loss(ans_disc_B, False) + \
+                #+ self.adv_loss(self.discB(X), True))
+            lossB = lossB_true + lossB_false
         
             del ans_disc_A, ans_disc_B
-        return lossA, lossB
+        return lossA, lossB, lossA_true, lossA_false, lossB_true, lossB_false
 
     
     def backward_gen(self, loss: torch.Tensor) -> None:
@@ -235,14 +254,13 @@ class DistLearning(BaseDist):
         self.scaler.step(self.optim_gen)
     
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
-
         self.discs.zero_grad(True)
-
         self.scaler.scale(lossA).backward()
         self.scaler.scale(lossB).backward()
 
         self.scaler.step(self.optim_discA)
         self.scaler.step(self.optim_discB)
+
 
         # Update scaler after last "step"
         self.scaler.update()
@@ -251,9 +269,12 @@ class DistLearning(BaseDist):
 
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loaderX.sampler.set_epoch(epoch - self.start_epoch)
-            self.train_loaderY.sampler.set_epoch(epoch - self.start_epoch)
+            # add self.epohs (shift in initial seed) to shuffle X and Y data differently
+            self.train_loaderY.sampler.set_epoch(epoch - self.start_epoch + self.epochs)
 
-            avg_loss_gens, avg_loss_disc_A, avg_loss_disc_B = 0, 0, 0
+            avg_loss_gens, avg_loss_disc_A, avg_loss_disc_B, avg_acc = 0, 0, 0, 0
+            avg_adv_lossA, avg_adv_lossB, avg_cycle_lossA, avg_cycle_lossB, avg_idn_lossX, avg_idn_lossY = 0, 0, 0, 0, 0, 0
+            avg_lossA_true, avg_lossA_false, avg_lossB_true, avg_lossB_false = 0, 0, 0, 0
             num_butch = min(len(self.train_loaderX), len(self.train_loaderY))
             self.models.train()
 
@@ -261,15 +282,28 @@ class DistLearning(BaseDist):
                                          total = num_butch):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
-                loss = self.forward_gen(x_batch, y_batch)
+                loss, adv_lossA, adv_lossB, cycle_lossA, cycle_lossB, idn_lossX, idn_lossY = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
-                loss_disc_A, loss_disc_B = self.forward_disc(x_batch, y_batch)
+                loss_disc_A, loss_disc_B, lossA_true, lossA_false, lossB_true, lossB_false = self.forward_disc(x_batch, y_batch)
                 self.backward_disc(loss_disc_A, loss_disc_B)
             
                 # Calculate average train loss
                 avg_loss_gens += (loss / num_butch).detach()
                 avg_loss_disc_A += (loss_disc_A / num_butch).detach()
                 avg_loss_disc_B += (loss_disc_B / num_butch).detach()
+                #avg_acc += acc / num_butch
+
+                avg_adv_lossA += adv_lossA.detach().item() / num_butch
+                avg_adv_lossB += adv_lossB.detach().item() / num_butch
+                avg_cycle_lossA += cycle_lossA.detach().item() / num_butch
+                avg_cycle_lossB += cycle_lossB.detach().item() / num_butch
+                avg_idn_lossX += idn_lossX.detach().item() / num_butch
+                avg_idn_lossY += idn_lossY.detach().item() / num_butch
+
+                avg_lossA_true += lossA_true.detach().item() / num_butch
+                avg_lossA_false += lossA_false.detach().item() / num_butch
+                avg_lossB_true += lossB_true.detach().item() / num_butch
+                avg_lossB_false += lossB_false.detach().item() / num_butch
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
             
@@ -282,7 +316,7 @@ class DistLearning(BaseDist):
             metrics = torch.tensor([avg_loss_gens / self.world_size,
                                     avg_loss_disc_A / self.world_size,
                                     avg_loss_disc_B / self.world_size], device = self.device)
-            dist.all_reduce(metrics, op = dist.ReduceOp.SUM)
+            dist.reduce(metrics, dst = 0, op = dist.ReduceOp.SUM)
 
             if self.rank == 0:
                 # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine
@@ -296,6 +330,35 @@ class DistLearning(BaseDist):
                                              'discA': self.scheduler_discA.get_last_lr()[0],
                                              'discB': self.scheduler_discB.get_last_lr()[0]
                                             },
+                                        'adv_gen':
+                                            {
+                                                'A': avg_adv_lossA,
+                                                'B': avg_adv_lossB
+                                            },
+                                        'cycle':
+                                            {
+                                                'A': avg_cycle_lossA,
+                                                'B': avg_cycle_lossB
+                                            },
+                                        'idn':
+                                            {
+                                                'X': avg_idn_lossX,
+                                                'Y': avg_idn_lossY
+                                            },
+                                        'adv_discA':
+                                            {
+                                                'true': avg_lossA_true,
+                                                'false': avg_lossA_false
+                                            },
+                                        'avg_discB':
+                                            {
+                                                'true': avg_lossB_true,
+                                                'false': avg_lossB_false
+                                            },
+                                        #'accuracy':
+                                         #   {
+                                          #   'discA': avg_acc
+                                          #  },
                                        'epoch': epoch})
                 
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 

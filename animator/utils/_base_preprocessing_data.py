@@ -49,6 +49,7 @@ class BaseDataset(ABC):
         self.to_resized_tensor = transforms.Compose([
             transforms.Resize(size, antialias = True)])
         self.norm = transforms.Normalize(mean, std)
+        self.crop = transforms.RandomCrop(size, pad_if_needed = True)
 
     def __len__(self) -> int:
         """Return number of pictures in dataset."""
