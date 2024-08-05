@@ -40,28 +40,16 @@ class DistLearning(BaseDist):
             if not os.path.exists(self.s3_storage):
                 os.makedirs(self.s3_storage)
 
-        datasetX = os.path.join(init_args.dataset, 'domainX/')
-        datasetY = os.path.join(init_args.dataset, 'domainY/')
-
-        train_setX = GetDataset(datasetX, train_data[0],
-                               size = params.data.size,
-                               mean = params.data.mean,
-                               std = params.data.std)
-        
-        train_setY = GetDataset(datasetY, train_data[1],
+        train_set = GetDataset(init_args.dataset, train_data,
                                size = params.data.size,
                                mean = params.data.mean,
                                std = params.data.std,
-                               rand_mode = True)
+                               seed = rank)
         
-        self.train_loaderX = self.prepare_dataloader(train_setX, rank,
+        self.train_loader = self.prepare_dataloader(train_set, rank,
                                                     self.world_size, self.batch_size, 
                                                     self.random_seed)
         
-        self.train_loaderY = self.prepare_dataloader(train_setY, rank,
-                                                    self.world_size, self.batch_size, 
-                                                    self.random_seed)
-
         # Create forward(A) and reverse(B) models
         # and initialize weights with Gaussian or Kaiming distribution
         self.genA = Generator()
@@ -268,18 +256,15 @@ class DistLearning(BaseDist):
     def execute(self,) -> None:
 
         for epoch in range(self.start_epoch, self.epochs):
-            self.train_loaderX.sampler.set_epoch(epoch - self.start_epoch)
-            # add self.epohs (shift in initial seed) to shuffle X and Y data differently
-            self.train_loaderY.sampler.set_epoch(epoch - self.start_epoch + self.epochs)
+            self.train_loader.sampler.set_epoch(epoch)
 
             avg_loss_gens, avg_loss_disc_A, avg_loss_disc_B, avg_acc = 0, 0, 0, 0
             avg_adv_lossA, avg_adv_lossB, avg_cycle_lossA, avg_cycle_lossB, avg_idn_lossX, avg_idn_lossY = 0, 0, 0, 0, 0, 0
             avg_lossA_true, avg_lossA_false, avg_lossB_true, avg_lossB_false = 0, 0, 0, 0
-            num_butch = min(len(self.train_loaderX), len(self.train_loaderY))
+            num_butch = len(self.train_loader)
             self.models.train()
 
-            for x_batch, y_batch in tqdm(zip(self.train_loaderX, self.train_loaderY),
-                                         total = num_butch):
+            for x_batch, y_batch in tqdm(self.train_loader):
                 x_batch = x_batch.to(self.device, non_blocking = True)
                 y_batch = y_batch.to(self.device, non_blocking = True)
                 loss, adv_lossA, adv_lossB, cycle_lossA, cycle_lossB, idn_lossX, idn_lossY = self.forward_gen(x_batch, y_batch)
@@ -377,6 +362,6 @@ class DistLearning(BaseDist):
                                    os.path.join(self.model_weights_dir, str(epoch) + '.pt'))               
         if self.rank == 0 and self.s3_storage is not None:
             # Save final results at s3 storage          
-            torch.save(self.save_model(epoch),
-                       os.path.join(self.s3_storage, str(epoch) + '.pt'))
+            torch.save(self.save_model(self.epochs - 1),
+                       os.path.join(self.s3_storage, str(self.epochs - 1) + '.pt'))
         dist.destroy_process_group()

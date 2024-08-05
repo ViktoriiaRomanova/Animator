@@ -10,7 +10,7 @@ from animator.utils.img_processing import ImgProcessing, ModelImgProcessing
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'
-MODEL_WEIGHTS = 'train_eval/local/train_checkpoints/199.pt'
+MODEL_WEIGHTS = 'train_eval/local/train_checkpoints/19.pt'
 #IMG_PATH = 'datasets/transform/domainX'
 #IMG_PATH = '/home/viktoriia/Pictures/tmp/'
 IMG_PATH = '/home/viktoriia/Downloads/transfer_test/domainX'
@@ -19,7 +19,7 @@ IMG_PATH = '/home/viktoriia/Downloads/transfer_test/domainX'
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
         data_transform = TrainingParams(**yaml.safe_load(file)).data
-    names = get_data(IMG_PATH)[1:3]
+    names = get_data(IMG_PATH)[1:2]
     imges = PostProcessingDataset(IMG_PATH, names,
                                   data_transform.size,
                                   data_transform.mean,
@@ -32,7 +32,7 @@ if __name__ == '__main__':
         img = img.permute((0, 2, 3, 1))
         img = img * tensor(data_transform.std) + tensor(data_transform.mean)
         return img
-
+    
     model_based_img_processor = ModelImgProcessing(Generator(), 'genA', MODEL_WEIGHTS,
                                                    mode = 'simple',
                                                    transform = img_transformation)

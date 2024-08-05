@@ -30,7 +30,7 @@ class BasePreprocessingData(ABC):
 class BaseDataset(ABC):
     """Prepare data for DataLoader."""
 
-    def __init__(self, img_dir: str, data: list[str],
+    def __init__(self, img_dir: str, data: list[str] | list[list[str], list[str]],
                  transform: nn.Module | transforms.Compose | None,
                  size: list[int, int],
                  mean: tuple[float, float, float],
@@ -43,11 +43,11 @@ class BaseDataset(ABC):
                 * list of filenames,
                 * picture transformation.
         """
-        self.imgnames = data  # list[image_name]
+        self.imgnames = data
         self.img_dir = img_dir
         self.transforms = transform
         self.to_resized_tensor = transforms.Compose([
-            transforms.Resize(size, antialias = True)])
+            transforms.Resize(size, antialias = True),])
         self.norm = transforms.Normalize(mean, std)
         self.crop = transforms.RandomCrop(size, pad_if_needed = True)
 
