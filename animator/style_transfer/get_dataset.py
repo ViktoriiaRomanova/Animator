@@ -1,5 +1,5 @@
 import os
-import random
+from random import randint
 
 import torch.nn as nn
 from torch import Tensor
@@ -18,7 +18,6 @@ class GetDataset(Dataset, _bp.BaseDataset):
                  size: list[int, int],
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float],
-                 seed: int,
                  transform: nn.Module | transforms.Compose | None = None
                 ) -> None:
         """
@@ -28,7 +27,6 @@ class GetDataset(Dataset, _bp.BaseDataset):
                 * picture transformation.
         """
         super().__init__(img_dir, data, transform, size, mean, std)
-        random.seed(seed)
         self.to_resized_tensor = transforms.Compose([
             transforms.Resize(size[0] + 30,
                               interpolation = transforms.InterpolationMode.BICUBIC,
@@ -44,9 +42,9 @@ class GetDataset(Dataset, _bp.BaseDataset):
         """Return image(transformed) by given index and random image from the smallest dataset."""
         if len(self.imgnames[0]) > len(self.imgnames[1]):
             ind_x = idx
-            ind_y = random.randint(0, len(self.imgnames[1]) - 1)
+            ind_y = randint(0, len(self.imgnames[1]) - 1)
         else:
-            ind_x = random.randint(0, len(self.imgnames[0]) - 1)
+            ind_x = randint(0, len(self.imgnames[0]) - 1)
             ind_y = idx
         img_x_path = os.path.join(self.img_dir_x, self.imgnames[0][ind_x])
         img_y_path = os.path.join(self.img_dir_y, self.imgnames[1][ind_y])

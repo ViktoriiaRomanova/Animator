@@ -1,3 +1,5 @@
+import random
+
 from argparse import Namespace
 from tqdm import tqdm
 import os
@@ -43,8 +45,7 @@ class DistLearning(BaseDist):
         train_set = GetDataset(init_args.dataset, train_data,
                                size = params.data.size,
                                mean = params.data.mean,
-                               std = params.data.std,
-                               seed = rank)
+                               std = params.data.std)
         
         self.train_loader = self.prepare_dataloader(train_set, rank,
                                                     self.world_size, self.batch_size, 
@@ -78,8 +79,8 @@ class DistLearning(BaseDist):
 
         self.scaler = torch.cuda.amp.GradScaler(enabled = False) # self.device.type == 'cuda')
 
-        self.fake_Y_buffer = ImageBuffer(params.main.buffer_size)
-        self.fake_X_buffer = ImageBuffer(params.main.buffer_size)
+        self.fake_Y_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
+        self.fake_X_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
 
         self.optim_gen = torch.optim.Adam(self.gens.parameters(),
                                           lr = params.optimizers.gen.lr,
@@ -108,7 +109,9 @@ class DistLearning(BaseDist):
                                  'scaler': self.scaler,
                                  'scheduler_gen': self.scheduler_gen,
                                  'scheduler_discA': self.scheduler_discA,
-                                 'scheduler_discB': self.scheduler_discB}
+                                 'scheduler_discB': self.scheduler_discB,
+                                 'bufferX': self.fake_X_buffer,
+                                 'bufferY': self.fake_Y_buffer}
         
         self.start_epoch = 0
         if init_args.imodel is not None:
@@ -127,6 +130,9 @@ class DistLearning(BaseDist):
                                         params.loss.cycle.lambda_B)
         self.idn_loss = IdentityLoss(params.loss.identity.ltype,
                                       params.loss.identity.lambda_idn)
+        
+        # to get different (from previous use) random numbers after loading the model
+        random.seed(rank + self.start_epoch)
 
         #for model in self.models:
             #model.compile()
@@ -271,6 +277,9 @@ class DistLearning(BaseDist):
                 self.backward_gen(loss)
                 loss_disc_A, loss_disc_B, lossA_true, lossA_false, lossB_true, lossB_false = self.forward_disc(x_batch, y_batch)
                 self.backward_disc(loss_disc_A, loss_disc_B)
+
+                self.fake_X_buffer.step()
+                self.fake_Y_buffer.step()
             
                 # Calculate average train loss
                 avg_loss_gens += (loss / num_butch).detach()
