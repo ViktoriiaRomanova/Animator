@@ -36,7 +36,7 @@ class PostProcessingDataset(Dataset, _bp.BaseDataset):
         """Return image/transformed image by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
 
-        image = io.read_image(img_path)
+        image = io.read_image(img_path, mode = io.ImageReadMode.RGB)
         image = transforms.functional.center_crop(image, output_size = max(image.shape))
         image = self.norm(self.to_resized_tensor(image).div(255))
 
