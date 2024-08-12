@@ -358,7 +358,7 @@ class DistLearning(BaseDist):
                 # Send metrics into stdout. This channel going to be transferred into initial machine. 
                 print(json_metrics)
             
-                if (epoch + 1) % 5 == 0:
+                if (epoch + 1) % 1 == 0:
                     if self.s3_storage is not None:
                         # Save model weights at S3 storage if the path to a bucket provided
                         torch.save(self.save_model(epoch),
