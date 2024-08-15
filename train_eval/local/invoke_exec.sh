@@ -44,7 +44,7 @@ docker --context remote-machine run --name animator \
 --gpus all cuda12.1.0:pytorch2.3.1 \
 python3 train.py \
 --dataset ${TRANSFORM} \
---imodel ${IMODEL}2024_08_09_10_34_29/35.pt \
+--imodel ${IMODEL}2024_08_10_21_11_33/160.pt \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
