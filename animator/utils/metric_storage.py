@@ -8,13 +8,12 @@ class MerticGroup:
     def __init__(self,
                  device: torch.device | None,
                  world_size: int,
-                 num_batch: int,
                  dst: int = 0) -> None:
         self.metrics = OrderedDict()
         self.device = device
         self.dst = dst
         self.world_size = world_size
-        self.num_batch = num_batch
+        self.count = 0
 
     def add(self, metric_name: str, val: int | float) -> None:
         if metric_name not in self.metrics:
@@ -23,7 +22,7 @@ class MerticGroup:
             self.metrics[metric_name] += val
     
     def share(self,) -> dict[str, float | int]:
-        shared_tensor = torch.tensor([val / (self.world_size * self.num_batch) for val in self.metrics.values()], device = self.device)
+        shared_tensor = torch.tensor([val / (self.world_size * self.count) for val in self.metrics.values()], device = self.device)
         dist.reduce(shared_tensor, dst = self.dst, op = dist.ReduceOp.SUM)
         self.metrics.clear()
         return {key: val.item() for key, val in zip(self.metrics.keys(), shared_tensor)}
@@ -34,13 +33,12 @@ class MetricStorage:
         self.rang = rang
         self.device = device
         self.world_size = world_size
-        self.num_batch = num_batch
         self.dst = dst
         self.epoch = -1
 
     def update(self, group_name: str, metric_name: str, val: float | int) -> None:
         if group_name not in self.groups:
-            self.groups[group_name] = MerticGroup(self.device, self.world_size, self.num_batch, self.dst)
+            self.groups[group_name] = MerticGroup(self.device, self.world_size, self.dst)
         self.groups[group_name].add(metric_name, val)
     
     def set_epoch(self, val: int) -> None:

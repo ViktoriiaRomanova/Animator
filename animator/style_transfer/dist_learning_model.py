@@ -33,6 +33,7 @@ class DistLearning(BaseDist):
         self.init_args = init_args
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
+        self.metrics = MetricStorage(self.rank, None, self.world_size, 0)
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         self.s3_storage = None
@@ -50,7 +51,6 @@ class DistLearning(BaseDist):
         self.train_loader = self.prepare_dataloader(train_set, rank,
                                                     self.world_size, self.batch_size, 
                                                     self.random_seed)
-        self.metrics = MetricStorage(self.rank, None, self.world_size, len(self.train_loader), 0)
         
         # Create forward(A) and reverse(B) models
         # and initialize weights with Gaussian or Kaiming distribution
