@@ -33,7 +33,7 @@ class DistLearning(BaseDist):
         self.init_args = init_args
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
-        self.metrics = MetricStorage(self.rank, None, self.world_size, 0)
+        self.metrics = MetricStorage(self.rank, 0)
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         self.s3_storage = None
@@ -208,13 +208,13 @@ class DistLearning(BaseDist):
 
             loss = adv_lossA + adv_lossB + cycle_lossA + cycle_lossB + idn_lossX + idn_lossY
 
-            self.metrics.update('Total_loss', 'gens', loss.item())
-            self.metrics.update('Adv_gen', 'discA', adv_lossA.item())
-            self.metrics.update('Adv_gen', 'discB', adv_lossB.item())
-            self.metrics.update('Cycle', 'A', cycle_lossA.item())
-            self.metrics.update('Cycle', 'B', cycle_lossB.item())
-            self.metrics.update('Identity', 'X', idn_lossX.item())
-            self.metrics.update('Identity', 'Y', idn_lossY.item())
+            self.metrics.update('Total_loss', 'gens', loss.detach().clone())
+            self.metrics.update('Adv_gen', 'discA', adv_lossA.detach().clone())
+            self.metrics.update('Adv_gen', 'discB', adv_lossB.detach().clone())
+            self.metrics.update('Cycle', 'A', cycle_lossA.detach().clone())
+            self.metrics.update('Cycle', 'B', cycle_lossB.detach().clone())
+            self.metrics.update('Identity', 'X', idn_lossX.detach().clone())
+            self.metrics.update('Identity', 'Y', idn_lossY.detach().clone())
 
         return loss
 
@@ -239,12 +239,12 @@ class DistLearning(BaseDist):
             lossB_false = adv_alpha * self.adv_loss(ans_disc_B, False)
             lossB = lossB_true + lossB_false
 
-            self.metrics.update('Total_loss', 'disc_A', lossA.item())
-            self.metrics.update('Total_loss', 'disc_B', lossB.item())
-            self.metrics.update('Adv_discA', 'True', lossA_true.item())
-            self.metrics.update('Adv_discA', 'False', lossA_false.item())
-            self.metrics.update('Adv_discB', 'True', lossB_true.item())
-            self.metrics.update('Adv_discB', 'False', lossB_false.item())
+            self.metrics.update('Total_loss', 'disc_A', lossA.detach().clone())
+            self.metrics.update('Total_loss', 'disc_B', lossB.detach().clone())
+            self.metrics.update('Adv_discA', 'True', lossA_true.detach().clone())
+            self.metrics.update('Adv_discA', 'False', lossA_false.detach().clone())
+            self.metrics.update('Adv_discB', 'True', lossB_true.detach().clone())
+            self.metrics.update('Adv_discB', 'False', lossB_false.detach().clone())
         
             del ans_disc_A, ans_disc_B
         return lossA, lossB
@@ -286,16 +286,21 @@ class DistLearning(BaseDist):
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
             
-            self.metrics.update('Lr', 'gens', self.scheduler_gen.get_last_lr()[0])
-            self.metrics.update('Lr', 'disc_A', self.scheduler_disc_A.get_last_lr()[0])
-            self.metrics.update('Lr', 'disc_B', self.scheduler_disc_B.get_last_lr()[0])
-            self.metrics.set_epoch(epoch)
+            self.metrics.update('Lr', 'gens',
+                                torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device))
+            self.metrics.update('Lr', 'disc_A',
+                                torch.tensor(self.scheduler_disc_A.get_last_lr()[0], device=self.device))
+            self.metrics.update('Lr', 'disc_B',
+                                torch.tensor(self.scheduler_disc_B.get_last_lr()[0], device=self.device))
+            self.metrics.epoch = epoch
             
             self.scheduler_gen.step()
             self.scheduler_discA.step()
             self.scheduler_discB.step()
 
-            self.metrics.share()
+            # Send metrics into stdout. This channel going to be transferred into initial machine.
+            self.metrics.compute()
+            self.metrics.reset()
 
             if self.rank == 0:            
                 if (epoch + 1) % 1 == 0:
