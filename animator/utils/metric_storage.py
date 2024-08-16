@@ -33,21 +33,23 @@ class ArbitraryGroup(Metric):
     full_state_update = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="mean")
-        self.add_state("count_state", default=torch.tensor(0), dist_reduce_fx="mean")
+        self.add_state("total", default=torch.tensor(0,dtype=torch.float32), dist_reduce_fx="mean")
+        self.add_state("count_state", default=torch.tensor(0,dtype=torch.float32), dist_reduce_fx="mean")
         self.names = set()
 
-    def update(self, name: str, value: torch.tensor) -> None:
+    def update(self, name: str, value: torch.tensor, **kwargs) -> None:
+        if len(kwargs) > 0:
+            raise AttributeError('Unknown arguments {}'.format(kwargs))
         if not hasattr(self, name):
-            self.add_state(name, default=torch.tensor(0), dist_reduce_fx="mean")
+            self.add_state(name, default=torch.tensor(0,dtype=torch.float32), dist_reduce_fx="mean")
             self.count_state += 1
             self.names.add(name)
         setattr(self, name, value + getattr(self, name))
         self.total += 1
     
     def compute(self,) -> dict[float]:
-        if self.total.ramainder(self, self.count_state).item() != 0:
-            raise RuntimeError('Unequal amount of of each state update.')
+        if self.total.remainder(self.count_state).item() != 0:
+            raise RuntimeError('Unequal amount of each substate update.{}{}'.format(self.total, self.count_state))
         self.total /= self.count_state
         result = {}
         for name in self.names:
@@ -55,45 +57,64 @@ class ArbitraryGroup(Metric):
         return result
 
 class MetricStorage:
-    def __int__(self, rang: int, dst: int) -> None:
-        self.rang = rang
+    def __init__(self, rank: int, dst: int) -> None:
+        self.rank = rank
         self.dst = dst
         self.groups = torch.nn.ModuleDict()
         self.epoch = -1
     
-    def update(self, group_name: str, state_name: str, val: torch.tensor) -> None:
+    def update(self, group_name: str, state_name: str, 
+               val: torch.tensor, **kwargs) -> None:
         if group_name not in self.groups:
             if group_name.find('accuracy') != -1:
-                self.groups[group_name] = Accuracy(task='binary', threshold=0.5,
-                                                   multidim_average='global',
-                                                   sync_on_compute=True)
+                self.groups[group_name] = torch.nn.ModuleDict({state_name: Accuracy(task='binary',
+                                                                                    threshold=0.5,
+                                                                                    multidim_average='global',
+                                                                                    sync_on_compute=True)})
             else:
                 self.groups[group_name] = ArbitraryGroup()
-        self.groups[group_name].update(state_name, val)
+        if isinstance(self.groups[group_name], torch.nn.ModuleDict) and \
+           state_name not in self.groups[group_name]:
+            self.groups[group_name][state_name] = Accuracy(task='binary', threshold=0.5,
+                                                           multidim_average='global',
+                                                           sync_on_compute=True)
+        if isinstance(self.groups[group_name], torch.nn.ModuleDict):
+            self.groups[group_name][state_name].update(val, **kwargs)
+        else:
+            self.groups[group_name].update(state_name, val, **kwargs)
     
    
     def compute(self,) -> None:
         result = {}
         for name, sub_group in self.groups.items():
-            result[name] = sub_group.compute()
+            if isinstance(sub_group, torch.nn.ModuleDict):
+                result[name] = {}
+                for key, met in sub_group.items():
+                    result[name][key] = met.compute().item()
+            else:
+                result[name] = sub_group.compute()
 
         result['epoch'] = self.epoch
-        if self.rang == self.dst:
+        if self.rank == self.dst:
             # Store metrics in JSON format to simplify parsing 
             # and transferring them into tensorboard at initial machine.
             print(jdumps(result))
     
     def reset(self,) -> None:
         for sub_group in self.groups.values():
-            sub_group.reset()
+            if isinstance(sub_group, torch.nn.ModuleDict):
+                for met in sub_group.values():
+                    met.reset()
+            else:
+                sub_group.reset()
 
 
 '''
 
 class MetricStorage:
-    def __init__(self, rang: int, device: torch.device, world_size: int, num_batch: int, dst: int) -> None:
+    def __init__(self, rank: int, device: torch.device, world_size: int, num_batch: int, dst: int) -> None:
         self.groups = OrderedDict()
-        self.rang = rang
+        self.rank = rank
         self.device = device
         self.world_size = world_size
         self.dst = dst
@@ -111,11 +132,11 @@ class MetricStorage:
         result = {}
         for group_name in self.groups.keys():
             metrics = self.groups[group_name].share()
-            if self.rang == self.dst:
+            if self.rank == self.dst:
                 result[group_name] = metrics
         result['epoch'] = self.epoch
 
-        if self.rang == self.dst:        
+        if self.rank == self.dst:        
             # Send metrics into stdout. This channel going to be transferred into initial machine.
             # Store metrics in JSON format to simplify parsing and transferring them into tensorboard at initial machine.
             print(jdumps(result))
