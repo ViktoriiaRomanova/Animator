@@ -15,7 +15,7 @@ from animator.base_distributed._distributed_model import BaseDist
 from .cycle_gan_model import Generator, Discriminator
 from .losses import AdversarialLoss, CycleLoss, IdentityLoss
 from ..utils.buffer import ImageBuffer
-from ..utils.metric_storage import MetricStorage
+from .metric_storage import MetricStorage
 from .get_dataset import GetDataset
 from ..utils.parameter_storages.transfer_parameters import TrainingParams
 
@@ -119,8 +119,6 @@ class DistLearning(BaseDist):
             self.start_epoch = self.load_model(init_args.imodel, self.device)
         
         self.epochs += self.start_epoch
-
-        #self.adv_test = AdversarialLoss('BCE', device=self.device)
 
         self.adv_loss = AdversarialLoss(params.loss.adversarial.ltype,
                                       params.loss.adversarial.real_val,
@@ -226,17 +224,18 @@ class DistLearning(BaseDist):
                             enabled = False): #self.device.type == 'cuda'):
             self.set_requires_grad(self.discs, True)
 
-            ans_disc_A = self.discA(self.fake_Y_buffer.get())
-            ans_disc_B = self.discB(self.fake_X_buffer.get())
+            ans_disc_A_false = self.discA(self.fake_Y_buffer.get())
+            ans_disc_B_false = self.discB(self.fake_X_buffer.get())
 
-            lossA_true = self.adv_loss(self.discA(Y), True) * adv_alpha
-            lossA_false = adv_alpha * self.adv_loss(ans_disc_A, False)
+            ans_disc_A_true = self.discA(Y)
+            ans_disc_B_true = self.discB(X)
+
+            lossA_true = self.adv_loss(ans_disc_A_true, True) * adv_alpha
+            lossA_false = adv_alpha * self.adv_loss(ans_disc_A_false, False)
             lossA = lossA_true + lossA_false
-            
-            #acc = (int(false_loss < 0.5) + int(true_loss > 0.5)) / 2
 
-            lossB_true = self.adv_loss(self.discB(X), True) * adv_alpha
-            lossB_false = adv_alpha * self.adv_loss(ans_disc_B, False)
+            lossB_true = self.adv_loss(ans_disc_B_true, True) * adv_alpha
+            lossB_false = adv_alpha * self.adv_loss(ans_disc_B_false, False)
             lossB = lossB_true + lossB_false
 
             self.metrics.update('Total_loss', 'disc_A', lossA.detach().clone())
@@ -245,8 +244,14 @@ class DistLearning(BaseDist):
             self.metrics.update('Adv_discA', 'False', lossA_false.detach().clone())
             self.metrics.update('Adv_discB', 'True', lossB_true.detach().clone())
             self.metrics.update('Adv_discB', 'False', lossB_false.detach().clone())
+
+            self.metrics.update('Accuracy', 'disc_A', ans_disc_A_true, torch.tensor(1.0, device=self.device).expand_as(ans_disc_A_true))
+            self.metrics.update('Accuracy', 'disc_A', ans_disc_A_false, torch.tensor(0.0, device=self.device).expand_as(ans_disc_A_false))
+
+            self.metrics.update('Accuracy', 'disc_B', ans_disc_B_true, torch.tensor(1.0, device=self.device).expand_as(ans_disc_B_true))
+            self.metrics.update('Accuracy', 'disc_B', ans_disc_B_false, torch.tensor(0.0, device=self.device).expand_as(ans_disc_B_false))
         
-            del ans_disc_A, ans_disc_B
+            del ans_disc_A_false, ans_disc_A_true, ans_disc_B_false, ans_disc_B_true
         return lossA, lossB
 
     
