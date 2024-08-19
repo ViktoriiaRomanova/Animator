@@ -26,7 +26,7 @@ class MetricGroup:
 
     def update(self, name: str, val: torch.Tensor, target: torch.Tensor | None) -> None:
         if name not in self.metrics:
-            self.metrics[name] = self.type(**self.kwargs)
+            self.metrics[name] = self.type(**self.kwargs).to(val.device)
         if target is not None:
             self.metrics[name].update(val, target)
         else:
@@ -36,7 +36,7 @@ class MetricGroup:
         result = {}
         for name in self.metrics:
             values = self.metrics[name].compute()
-            result[name] = values.numpy().tolist() if isinstance(values, torch.Tensor) else values
+            result[name] = values.cpu().numpy().tolist() if isinstance(values, torch.Tensor) else values
         return result
 
     def reset(self,) -> None:

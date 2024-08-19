@@ -294,9 +294,9 @@ class DistLearning(BaseDist):
             self.metrics.update('Lr', 'gens',
                                 torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device))
             self.metrics.update('Lr', 'disc_A',
-                                torch.tensor(self.scheduler_disc_A.get_last_lr()[0], device=self.device))
+                                torch.tensor(self.scheduler_discA.get_last_lr()[0], device=self.device))
             self.metrics.update('Lr', 'disc_B',
-                                torch.tensor(self.scheduler_disc_B.get_last_lr()[0], device=self.device))
+                                torch.tensor(self.scheduler_discB.get_last_lr()[0], device=self.device))
             self.metrics.epoch = epoch
             
             self.scheduler_gen.step()
