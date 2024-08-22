@@ -23,7 +23,7 @@ set -e
 # Move to script directory
 cd $(dirname "$0")
 
-TRANSFORM=datasets/transfer_test2/
+TRANSFORM=datasets/transfer_test3/
 OUTPUT_MODEL=train_checkpoints/
 IMODEL=train_checkpoints/
 PARAMS=hyperparameters.yaml
@@ -31,7 +31,7 @@ PARAMS=hyperparameters.yaml
 # Automatic move of the necessary data
 #scp ../style_transfer/train.py remote-machine:$MY_REMOTE_DIR # train
 #scp ../style_transfer/worker.py remote-machine:$MY_REMOTE_DIR # worker
-#scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
+scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
 scp ../style_transfer/hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
 #scp -r ../../datasets/transform_vangogh/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
@@ -44,7 +44,6 @@ docker --context remote-machine run --name animator \
 --gpus all cuda12.1.0:pytorch2.3.1 \
 python3 train.py \
 --dataset ${TRANSFORM} \
---imodel ${IMODEL}2024_08_10_21_11_33/160.pt \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}

@@ -49,7 +49,9 @@ class ImageBuffer():
 
     def step(self,) -> None:
         """Generate images cross-buffer exchange."""
-        image_list = [torch.empty(self.shape, device = self.device) for _ in range(self.worldsize)]
+        image_list = [torch.empty(self.shape,
+                                  device = self.device,
+                                  dtype = self.buffer.dtype) for _ in range(self.worldsize)]
         index_list = [torch.empty(1, dtype = torch.int32) for _ in range(self.worldsize)]
         all_gather(image_list, self.buffer)
         all_gather(index_list, torch.tensor([self.ind], device = self.device, dtype = torch.int32))

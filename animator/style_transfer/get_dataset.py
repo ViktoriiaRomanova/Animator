@@ -51,8 +51,8 @@ class GetDataset(Dataset, _bp.BaseDataset):
         
         image_x = io.read_image(img_x_path, mode = io.ImageReadMode.RGB)
         image_y = io.read_image(img_y_path, mode = io.ImageReadMode.RGB)
-        image_x = self.crop(self.norm(self.to_resized_tensor(image_x).div(255)))
-        image_y = self.crop(self.norm(self.to_resized_tensor(image_y).div(255)))
+        image_x = self.crop(self.norm(image_x.div(255)))
+        image_y = self.crop(self.norm(image_y.div(255)))
 
         return (image_x, image_y) if self.transforms is None \
                else (self.transforms(image_x), self.transforms(image_y))
