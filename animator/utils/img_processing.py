@@ -7,11 +7,12 @@ from typing import Callable
 class ModelImgProcessing(BaseImgProcessing):
     def __init__(self, model: nn.Module, model_name: str,
                  path: str, mode: str = 'mask',
-                 transform: Callable[[torch.tensor], torch.tensor] | None = None) -> None:
+                 transform: Callable[[torch.tensor], torch.tensor] | None = None,
+                 device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
-        self.model = model
+        self.model = model.to(device)
         self.transform = transform
-        state = torch.load(path, map_location = torch.device('cpu'))[model_name]
+        state = torch.load(path, map_location = device)[model_name]
         self.model.load_state_dict(state)
         self.model.eval()
         self.mode = mode
