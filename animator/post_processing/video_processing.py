@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 import torch
 from torch.utils.data import DataLoader
 from torchvision import io
+import matplotlib.pyplot as plt
 
 from animator.style_transfer.cycle_gan_model import Generator
 from animator.utils.img_processing import ModelImgProcessing
@@ -19,7 +20,7 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
     def img_transformation(img: torch.Tensor) -> torch.Tensor:
         img = img.permute((0, 2, 3, 1))
         img = img * torch.tensor(data_transform.std) + torch.tensor(data_transform.mean)
-        img = (img * 255).to(torch.uint8)
+
         return img
     
     img_processor = ModelImgProcessing(Generator(), 'genA', weights_path,
@@ -28,20 +29,23 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
                                                    device = device)
 
     video_set = PostProcessingVideoset(video_path, 0, 2,
-                                       data_transform.size,
+                                       data_transform.size[0],
                                        data_transform.mean,
                                        data_transform.std)
-    data_loader = DataLoader(video_set, 4,False, drop_last=False)
+    data_loader = DataLoader(video_set, 8,False, drop_last=False)
 
     transformed_frames = []
     for batch in data_loader:
         batch = batch.to(device)
-        transformed_frames.append(img_processor(batch))
+        transformed_frames.append((img_processor(batch)* 255).to(torch.uint8))
     res= torch.cat(transformed_frames)
-    print(res.shape)
+
     io.write_video(results_path,
-                  res,
-                  fps=24)
+                   res,
+                   #video_codec='hevc',
+                   audio_array=video_set.audio,
+                   fps=video_set.metadata['video_fps'],
+                   audio_fps=video_set.metadata['audio_fps'])
 
 if __name__ == '__main__':
     parser = ArgumentParser()

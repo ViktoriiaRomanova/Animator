@@ -1,7 +1,7 @@
 import os
 
 import torch.nn as nn
-from torch import tensor
+from torch import tensor, rot90
 from torch.utils.data import Dataset
 from torchvision import io
 from torchvision import transforms
@@ -69,17 +69,18 @@ class PostProcessingVideoset(Dataset):
         self.crop = transforms.CenterCrop(size)
         self.transforms = transform
         # TODO: fix load of all video 
-        self.frames, _, _ = io.read_video(video_path,
-                                          start_pts=start,
-                                          end_pts=end,
-                                          pts_unit='sec',
-                                          output_format='TCHW')
+        self.frames, self.audio, self.metadata = io.read_video(video_path,
+                                                               start_pts=start,
+                                                               end_pts=end,
+                                                               pts_unit='sec',
+                                                               output_format='TCHW')
+
     def __len__(self,) -> int:
         return len(self.frames)
 
     def __getitem__(self, idx: int) -> tensor:
         """Return image/transformed image by given index."""
-        image = self.frames[idx]
-        image = self.crop(self.norm(self.to_resized_tensor(image).div(255)))
+        image = rot90(self.frames[idx], -1, [1, 2])
+        image = self.norm(self.to_resized_tensor(image).div(255))
 
         return image if self.transforms is None else self.transforms(image)
