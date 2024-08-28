@@ -1,3 +1,4 @@
+import os
 import yaml
 from argparse import ArgumentParser
 
@@ -20,7 +21,7 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
     def img_transformation(img: torch.Tensor) -> torch.Tensor:
         img = img.permute((0, 2, 3, 1))
         img = img * torch.tensor(data_transform.std) + torch.tensor(data_transform.mean)
-
+        img = img.permute((0, 3, 1, 2))
         return img
     
     img_processor = ModelImgProcessing(Generator(), 'genA', weights_path,
@@ -28,7 +29,7 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
                                                    transform = img_transformation,
                                                    device = device)
 
-    video_set = PostProcessingVideoset(video_path, 0, 2,
+    video_set = PostProcessingVideoset(video_path, 12, 14,
                                        data_transform.size[0],
                                        data_transform.mean,
                                        data_transform.std)
@@ -40,9 +41,10 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
         transformed_frames.append((img_processor(batch)* 255).to(torch.uint8))
     res= torch.cat(transformed_frames)
 
-    io.write_video(results_path,
+    io.write_video(os.path.join(results_path, video_set.res_name),
                    res,
                    #video_codec='hevc',
+                   audio_codec='aac',
                    audio_array=video_set.audio,
                    fps=video_set.metadata['video_fps'],
                    audio_fps=video_set.metadata['audio_fps'])
