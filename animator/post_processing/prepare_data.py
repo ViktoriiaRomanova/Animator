@@ -1,7 +1,7 @@
 import os
 
 import torch.nn as nn
-from torch import Tensor, rot90
+from torch import Tensor, rot90, cuda
 from torch.utils.data import Dataset
 from torchaudio.io import StreamReader, StreamWriter
 from torchvision import io
@@ -51,17 +51,15 @@ class PostProcessingVideo:
     def __init__(self, video_path: str,
                  results_folder: str,
                  processor: ModelImgProcessing, 
-                 size: list[int, int],
+                 size: int,
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float],
-                 start: int | None = None,
-                 end: int | None = None,
+                 start: float = 0.0,
+                 end: float | None = None,
                  rotation: int = 0,
                  batch_size: int = 8,
                  transform: nn.Module | transforms.Compose | None = None) -> None:
         """
-            Map-style Dataset.
-
             Args:
                 video_dir - video directory,
                 start - start,
@@ -84,28 +82,36 @@ class PostProcessingVideo:
         self.streamer = StreamReader(video_path)
         self.video_info = self.streamer.get_src_stream_info(0)
         self.audio_info = self.streamer.get_src_stream_info(1)
-        self.streamer.add_video_stream(frames_per_chunk=batch_size, hw_accel='cuda')
-        self.streamer.add_audio_stream(frames_per_chunk=batch_size)
-
-        self.writer = None
+        self.streamer.add_video_stream(frames_per_chunk=batch_size, hw_accel='cuda' if cuda.is_available() else None)
+        self.streamer.add_audio_stream(frames_per_chunk=self.audio_info.num_frames)
+        self.streamer.seek(start)
+        if end is not None:
+            self.end = min(int(end * batch_size), self.video_info.num_frames)
+        else:
+            self.end = self.video_info.num_frames
 
     def apply(self,) -> None:
-        for [video_chunk], [audio_chunk] in self.streamer.stream():
-            video_chunk = self.processor(self._chunk_transform(video_chunk))
-            if self.writer is None:
-                self.writer = StreamWriter(self.results_path)
-                self.writer.add_video_stream(self.video_info.frame_rate,
-                                             video_chunk.shape[-2],
-                                             video_chunk.shape[-1])
-
-
-
-        # TODO: fix load of all video 
-        self.frames, self.audio, self.metadata = io.read_video(video_path,
-                                                               start_pts=start,
-                                                               end_pts=end,
-                                                               pts_unit='sec',
-                                                               output_format='TCHW')
+        iter_ = self.streamer.stream()
+        video_chunk, audio_chunk = next(iter_)
+        writer = StreamWriter(self.results_path)
+        writer.add_video_stream(self.video_info.frame_rate,
+                                video_chunk.shape[-2],
+                                video_chunk.shape[-1],
+                                #encoder=self.video_info.codec,
+                                encoder_format=self.video_info.format,
+                                hw_accel='cuda' if cuda.is_available() else None)
+        writer.add_audio_stream(self.audio_info.sample_rate,
+                                self.audio_info.num_channels,
+                                format=self.audio_info.format,
+                                #encoder=self.audio_info.codec,
+                                encoder_format=self.audio_info.format)
+        with writer.open():
+            writer.write_video_chunk((self.processor(self._chunk_transform(video_chunk))* 255).to(torch.uint8))
+            writer.write_audio_chunk(audio_chunk)
+        
+            for video_chunk, _ in iter_:
+                video_chunk = self.processor(self._chunk_transform(video_chunk))
+                writer.write_video_chunk((video_chunk * 255).to(torch.uint8))
 
 
     def _chunk_transform(self, chunk: Tensor) -> Tensor:

@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 from animator.style_transfer.cycle_gan_model import Generator
 from animator.utils.img_processing import ModelImgProcessing
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
-from animator.post_processing.prepare_data import PostProcessingVideoset
+from animator.post_processing.prepare_data import PostProcessingVideo
 
-def video_transform(video_path: str, weights_path: str, results_path, hyperparam_path: str) -> None:
+def video_transform(video_path: str, weights_path: str, results_folder, hyperparam_path: str) -> None:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     with open(hyperparam_path, 'r') as file:
@@ -29,25 +29,15 @@ def video_transform(video_path: str, weights_path: str, results_path, hyperparam
                                                    transform = img_transformation,
                                                    device = device)
 
-    video_set = PostProcessingVideoset(video_path, 12, 14,
-                                       data_transform.size[0],
-                                       data_transform.mean,
-                                       data_transform.std)
-    data_loader = DataLoader(video_set, 8,False, drop_last=False)
+    video_transformer = PostProcessingVideo(video_path,
+                                            results_folder,
+                                            img_processor,
+                                            data_transform.size[0],
+                                            data_transform.mean,
+                                            data_transform.std,
+                                            rotation=-1)
 
-    transformed_frames = []
-    for batch in data_loader:
-        batch = batch.to(device)
-        transformed_frames.append((img_processor(batch)* 255).to(torch.uint8))
-    res= torch.cat(transformed_frames)
-
-    io.write_video(os.path.join(results_path, video_set.res_name),
-                   res,
-                   #video_codec='hevc',
-                   audio_codec='aac',
-                   audio_array=video_set.audio,
-                   fps=video_set.metadata['video_fps'],
-                   audio_fps=video_set.metadata['audio_fps'])
+    video_transformer.apply()
 
 if __name__ == '__main__':
     parser = ArgumentParser()
