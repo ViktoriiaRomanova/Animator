@@ -1,7 +1,8 @@
 import os
 
+import torch
 import torch.nn as nn
-from torch import Tensor, rot90, cuda
+from torch import Tensor, rot90, cuda, uint8, cat
 from torch.utils.data import Dataset
 from torchaudio.io import StreamReader, StreamWriter
 from torchvision import io
@@ -69,7 +70,7 @@ class PostProcessingVideo:
                 transform - frame transformation.
         """
         self.results_path = os.path.join(results_folder,
-                                         os.path.join('res_', os.path.basename(video_path)))
+                                         'res_' + os.path.basename(video_path))
         
         self.processor = processor
 
@@ -93,34 +94,33 @@ class PostProcessingVideo:
     def apply(self,) -> None:
         iter_ = self.streamer.stream()
         video_chunk, audio_chunk = next(iter_)
+        video_chunk = self._chunk_transform(video_chunk)
         writer = StreamWriter(self.results_path)
         writer.add_video_stream(self.video_info.frame_rate,
                                 video_chunk.shape[-2],
                                 video_chunk.shape[-1],
                                 #encoder=self.video_info.codec,
-                                encoder_format=self.video_info.format,
                                 hw_accel='cuda' if cuda.is_available() else None)
-        writer.add_audio_stream(self.audio_info.sample_rate,
+        writer.add_audio_stream(int(self.audio_info.sample_rate),
                                 self.audio_info.num_channels,
-                                format=self.audio_info.format,
-                                #encoder=self.audio_info.codec,
-                                encoder_format=self.audio_info.format)
+                                format='flt',
+                                encoder=self.audio_info.codec)
         with writer.open():
-            writer.write_video_chunk((self.processor(self._chunk_transform(video_chunk))* 255).to(torch.uint8))
-            writer.write_audio_chunk(audio_chunk)
+            writer.write_video_chunk(0, (self.processor(video_chunk)* 255).to(uint8))
+            writer.write_audio_chunk(1, audio_chunk)
         
             for video_chunk, _ in iter_:
                 video_chunk = self.processor(self._chunk_transform(video_chunk))
-                writer.write_video_chunk((video_chunk * 255).to(torch.uint8))
+                writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
 
 
     def _chunk_transform(self, chunk: Tensor) -> Tensor:
         """Return image/transformed image by given index."""
         result = []
         for image in chunk:
-            image = rot90(image, self.rotation, [1, 2])
+            image = rot90(image.unsqueeze(0), self.rotation, [2, 3])
             image = self.norm(self.to_resized_tensor(image).div(255))
             if self.transforms is not None:
                 image = self.transforms(image)
             result.append(image)
-        return torch.cat(result)
+        return cat(result)
