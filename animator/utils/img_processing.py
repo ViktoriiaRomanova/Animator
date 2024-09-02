@@ -12,7 +12,7 @@ class ModelImgProcessing(BaseImgProcessing):
         super().__init__()
         self.model = model.to(device)
         self.transform = transform
-        state = torch.load(path, map_location = device)[model_name]
+        state = torch.load(path, map_location = device, weights_only = True)[model_name]
         self.model.load_state_dict(state)
         self.model.eval()
         self.mode = mode

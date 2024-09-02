@@ -1,6 +1,6 @@
 import os
 
-import torch
+
 import torch.nn as nn
 from torch import Tensor, rot90, cuda, uint8, cat
 from torch.utils.data import Dataset
@@ -49,78 +49,77 @@ class PostProcessingDataset(Dataset, _bp.BaseDataset):
 class PostProcessingVideo:
     """Prepare data for DataLoader to load in trained model."""
 
-    def __init__(self, video_path: str,
-                 results_folder: str,
+    def __init__(self,
                  processor: ModelImgProcessing, 
                  size: int,
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float],
-                 start: float = 0.0,
-                 end: float | None = None,
-                 rotation: int = 0,
                  batch_size: int = 8,
-                 transform: nn.Module | transforms.Compose | None = None) -> None:
+                 ) -> None:
         """
             Args:
-                video_dir - video directory,
-                start - start,
                 size - resulted size,
                 mean - image mean,
                 std - image standard deviation,
                 transform - frame transformation.
-        """
-        self.results_path = os.path.join(results_folder,
-                                         'res_' + os.path.basename(video_path))
-        
+        """     
         self.processor = processor
 
         self.to_resized_tensor = transforms.Resize(size, antialias = True)
         self.norm = transforms.Normalize(mean, std)
-        self.rotation = rotation
+
+        self.batch_size = batch_size
  
-        self.transforms = transform
+    def apply(self, video_path: str,
+                    results_folder: str,
+                    rotation: int = 0,
+                    interval: list[float, float] = [0.0, float('inf')],
+                    transform: nn.Module | transforms.Compose | None = None) -> None:
+        results_path = os.path.join(results_folder,
+                                    'res_' + os.path.basename(video_path))
+        
+        streamer = StreamReader(video_path)
+        metadata = self.streamer.get_metadata()
+        video_info = self.streamer.get_src_stream_info(0)
+        audio_info = self.streamer.get_src_stream_info(1)
+        streamer.add_basic_video_stream(frames_per_chunk=self.batch_size, hw_accel='cuda' if cuda.is_available() else None)
+        streamer.add_basic_audio_stream(frames_per_chunk=self.audio_info.num_frames)
+        streamer.seek(interval[0])
 
-        self.streamer = StreamReader(video_path)
-        self.video_info = self.streamer.get_src_stream_info(0)
-        self.audio_info = self.streamer.get_src_stream_info(1)
-        self.streamer.add_video_stream(frames_per_chunk=batch_size, hw_accel='cuda' if cuda.is_available() else None)
-        self.streamer.add_audio_stream(frames_per_chunk=self.audio_info.num_frames)
-        self.streamer.seek(start)
-        if end is not None:
-            self.end = min(int(end * batch_size), self.video_info.num_frames)
-        else:
-            self.end = self.video_info.num_frames
-
-    def apply(self,) -> None:
         iter_ = self.streamer.stream()
         video_chunk, audio_chunk = next(iter_)
-        video_chunk = self._chunk_transform(video_chunk)
+        video_chunk = self._chunk_transform(video_chunk, rotation)
+
         writer = StreamWriter(self.results_path)
-        writer.add_video_stream(self.video_info.frame_rate,
-                                video_chunk.shape[-2],
-                                video_chunk.shape[-1],
-                                #encoder=self.video_info.codec,
+        writer.set_metadata(self.metadata)
+        writer.add_video_stream(frame_rate=self.video_info.frame_rate,
+                                height=video_chunk.shape[-2],
+                                width=video_chunk.shape[-1],
                                 hw_accel='cuda' if cuda.is_available() else None)
         writer.add_audio_stream(int(self.audio_info.sample_rate),
                                 self.audio_info.num_channels,
-                                format='flt',
+                                encoder_format='fltp',
                                 encoder=self.audio_info.codec)
         with writer.open():
             writer.write_video_chunk(0, (self.processor(video_chunk)* 255).to(uint8))
             writer.write_audio_chunk(1, audio_chunk)
-        
+
             for video_chunk, _ in iter_:
                 video_chunk = self.processor(self._chunk_transform(video_chunk))
                 writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
 
 
-    def _chunk_transform(self, chunk: Tensor) -> Tensor:
+    def _chunk_transform(self, chunk: Tensor,
+                         rotation: int = 0,
+                         transform: nn.Module | transforms.Compose | None = None) -> Tensor:
         """Return image/transformed image by given index."""
         result = []
         for image in chunk:
-            image = rot90(image.unsqueeze(0), self.rotation, [2, 3])
+            image = rot90(image.unsqueeze(0), rotation, [2, 3])
             image = self.norm(self.to_resized_tensor(image).div(255))
-            if self.transforms is not None:
+            size = image.shape
+            image = transforms.functional.center_crop(image, )
+            if transform is not None:
                 image = self.transforms(image)
             result.append(image)
         return cat(result)
