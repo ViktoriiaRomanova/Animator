@@ -29,15 +29,13 @@ def video_transform(video_path: str, weights_path: str, results_folder, hyperpar
                                                    transform = img_transformation,
                                                    device = device)
 
-    video_transformer = PostProcessingVideo(video_path,
-                                            results_folder,
-                                            img_processor,
+    video_transformer = PostProcessingVideo(img_processor,
                                             data_transform.size[0],
                                             data_transform.mean,
-                                            data_transform.std,
-                                            rotation=-1)
+                                            data_transform.std)
 
-    video_transformer.apply()
+    video_transformer.apply(video_path,
+                            results_folder)
 
 if __name__ == '__main__':
     parser = ArgumentParser()

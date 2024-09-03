@@ -1,6 +1,7 @@
 import os
+from warnings import warn
 
-
+import ffmpeg
 import torch.nn as nn
 from torch import Tensor, rot90, cuda, uint8, cat
 from torch.utils.data import Dataset
@@ -63,62 +64,81 @@ class PostProcessingVideo:
                 std - image standard deviation,
                 transform - frame transformation.
         """     
-        self.processor = processor
+        self._processors = [processor]
 
         self.to_resized_tensor = transforms.Resize(size, antialias = True)
         self.norm = transforms.Normalize(mean, std)
 
         self.batch_size = batch_size
+    
+    def forward(self,)
  
     def apply(self, video_path: str,
                     results_folder: str,
-                    rotation: int = 0,
                     interval: list[float, float] = [0.0, float('inf')],
-                    transform: nn.Module | transforms.Compose | None = None) -> None:
+                    transformation: nn.Sequential | None = None) -> None:
         results_path = os.path.join(results_folder,
                                     'res_' + os.path.basename(video_path))
         
         streamer = StreamReader(video_path)
-        metadata = self.streamer.get_metadata()
-        video_info = self.streamer.get_src_stream_info(0)
-        audio_info = self.streamer.get_src_stream_info(1)
-        streamer.add_basic_video_stream(frames_per_chunk=self.batch_size, hw_accel='cuda' if cuda.is_available() else None)
-        streamer.add_basic_audio_stream(frames_per_chunk=self.audio_info.num_frames)
+        ind_video_stream = streamer.default_video_stream
+        ind_audio_stream = streamer.default_audio_stream
+        if ind_video_stream is None:
+            warn('Video stream is empty, no actions will be made')
+            return
+        
+        metadata = ffmpeg.probe(video_path)
+        rotation = int(metadata['streams'][ind_video_stream].get('side_data_list', [{},{}])[1].get('rotation', 0) // 90)
+
+        video_info = streamer.get_src_stream_info(ind_video_stream)
+        audio_info = streamer.get_src_stream_info(ind_audio_stream)
+        streamer.add_basic_video_stream(frames_per_chunk=self.batch_size,
+                                        hw_accel='cuda' if cuda.is_available() else None)
+        streamer.add_basic_audio_stream(frames_per_chunk=audio_info.num_frames)
         streamer.seek(interval[0])
 
-        iter_ = self.streamer.stream()
+        iter_ = streamer.stream()
         video_chunk, audio_chunk = next(iter_)
-        video_chunk = self._chunk_transform(video_chunk, rotation)
+        video_chunk = self.processor(self._chunk_transform(video_chunk, rotation, transformation))
+        height, width = video_chunk.shape[-2:]
 
-        writer = StreamWriter(self.results_path)
-        writer.set_metadata(self.metadata)
-        writer.add_video_stream(frame_rate=self.video_info.frame_rate,
-                                height=video_chunk.shape[-2],
-                                width=video_chunk.shape[-1],
+        # Adjust the resulted size 
+        # to avoid an error with encoding an odd length of a video side
+        if height % 2 != 0 or width % 2 != 0:
+            height -= 1 if height % 2 != 0 else 0
+            width -= 1 if width % 2 != 0 else 0
+            video_adjusting_transform = transforms.CenterCrop((height, width))
+            video_chunk = video_adjusting_transform(video_chunk)
+            self.processor.append(video_adjusting_transform)
+
+        writer = StreamWriter(results_path)
+        writer.set_metadata(streamer.get_metadata())
+        writer.add_video_stream(video_info.frame_rate,
+                                height,
+                                width,
                                 hw_accel='cuda' if cuda.is_available() else None)
-        writer.add_audio_stream(int(self.audio_info.sample_rate),
-                                self.audio_info.num_channels,
+        
+        writer.add_audio_stream(int(audio_info.sample_rate),
+                                audio_info.num_channels,
                                 encoder_format='fltp',
-                                encoder=self.audio_info.codec)
+                                encoder=audio_info.codec)
         with writer.open():
-            writer.write_video_chunk(0, (self.processor(video_chunk)* 255).to(uint8))
+            writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
             writer.write_audio_chunk(1, audio_chunk)
 
             for video_chunk, _ in iter_:
-                video_chunk = self.processor(self._chunk_transform(video_chunk))
+                video_chunk = self.processor(self._chunk_transform(video_chunk, rotation, transformation))
                 writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
 
 
     def _chunk_transform(self, chunk: Tensor,
                          rotation: int = 0,
-                         transform: nn.Module | transforms.Compose | None = None) -> Tensor:
+                         transform: nn.Module | nn.Sequential | None = None) -> Tensor:
         """Return image/transformed image by given index."""
         result = []
         for image in chunk:
             image = rot90(image.unsqueeze(0), rotation, [2, 3])
             image = self.norm(self.to_resized_tensor(image).div(255))
-            size = image.shape
-            image = transforms.functional.center_crop(image, )
             if transform is not None:
                 image = self.transforms(image)
             result.append(image)
