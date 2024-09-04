@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import numpy as np
 from collections.abc import Callable
 
 import torch
@@ -9,7 +8,7 @@ class BaseImgProcessing(ABC):
         pass
 
     def _conv_to_img(self, images: torch.tensor,
-                     transform: Callable[[np.array], np.array] | None = None
+                     transform: Callable[[torch.Tensor], torch.Tensor] | None = None
                      ) -> torch.tensor:
         """Convert image to display."""
         if transform is not None:

@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from torch import nn
 from ._base_img_processing import BaseImgProcessing
@@ -18,7 +17,7 @@ class ModelImgProcessing(BaseImgProcessing):
         self.mode = mode
     
     def __call__(self, img: torch.tensor) -> torch.tensor:
-        if len(img) == 3:
+        if img.dim() == 3:
             img = img.unsqueeze(0)
         with torch.no_grad():
             if self.mode == 'simple':
@@ -34,9 +33,9 @@ class ModelImgProcessing(BaseImgProcessing):
         return img
 
 class ImgProcessing(BaseImgProcessing):
-    def __init__(self, transform: Callable[[torch.tensor], torch.tensor] | None = None) -> None:
+    def __init__(self, transform: Callable[[torch.Tensor], torch.Tensor] | None = None) -> None:
         super().__init__()
         self.transform = transform
     
-    def __call__(self, img: torch.tensor) -> torch.tensor:
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
         return self._conv_to_img(img, self.transform)

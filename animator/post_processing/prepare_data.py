@@ -55,7 +55,7 @@ class PostProcessingVideo:
                  size: int,
                  mean: tuple[float, float, float],
                  std: tuple[float, float, float],
-                 batch_size: int = 8,
+                 batch_size: int = 9,
                  ) -> None:
         """
             Args:
@@ -71,7 +71,10 @@ class PostProcessingVideo:
 
         self.batch_size = batch_size
     
-    def forward(self,)
+    def forward(self, video_chunc: Tensor) -> Tensor:
+        for modifier in self._processors:
+            video_chunc = modifier(video_chunc)
+        return video_chunc
  
     def apply(self, video_path: str,
                     results_folder: str,
@@ -93,13 +96,16 @@ class PostProcessingVideo:
         video_info = streamer.get_src_stream_info(ind_video_stream)
         audio_info = streamer.get_src_stream_info(ind_audio_stream)
         streamer.add_basic_video_stream(frames_per_chunk=self.batch_size,
+                                        frame_rate=video_info.frame_rate,
                                         hw_accel='cuda' if cuda.is_available() else None)
-        streamer.add_basic_audio_stream(frames_per_chunk=audio_info.num_frames)
+        streamer.add_basic_audio_stream(frames_per_chunk= 3 * 4410,
+                                        buffer_chunk_size= 3 * 4410,
+                                        sample_rate=audio_info.sample_rate)
         streamer.seek(interval[0])
 
         iter_ = streamer.stream()
         video_chunk, audio_chunk = next(iter_)
-        video_chunk = self.processor(self._chunk_transform(video_chunk, rotation, transformation))
+        video_chunk = self.forward(self._chunk_transform(video_chunk, rotation, transformation))
         height, width = video_chunk.shape[-2:]
 
         # Adjust the resulted size 
@@ -109,13 +115,13 @@ class PostProcessingVideo:
             width -= 1 if width % 2 != 0 else 0
             video_adjusting_transform = transforms.CenterCrop((height, width))
             video_chunk = video_adjusting_transform(video_chunk)
-            self.processor.append(video_adjusting_transform)
+            self._processors.append(video_adjusting_transform)
 
         writer = StreamWriter(results_path)
         writer.set_metadata(streamer.get_metadata())
         writer.add_video_stream(video_info.frame_rate,
-                                height,
-                                width,
+                                height=height,
+                                width=width,
                                 hw_accel='cuda' if cuda.is_available() else None)
         
         writer.add_audio_stream(int(audio_info.sample_rate),
@@ -125,10 +131,15 @@ class PostProcessingVideo:
         with writer.open():
             writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
             writer.write_audio_chunk(1, audio_chunk)
+            #print('video: ', video_chunk.shape if video_chunk is not None else None)
+            #print('audio: ', audio_chunk.shape if audio_chunk is not None else None)
 
-            for video_chunk, _ in iter_:
-                video_chunk = self.processor(self._chunk_transform(video_chunk, rotation, transformation))
+            for video_chunk, audio_chunk in iter_:
+                video_chunk = self.forward(self._chunk_transform(video_chunk, rotation, transformation))
+                #print('video: ', video_chunk.shape if video_chunk is not None else None)
                 writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
+                #print('audio: ', audio_chunk.shape if audio_chunk is not None else None)
+                writer.write_audio_chunk(1, audio_chunk)
 
 
     def _chunk_transform(self, chunk: Tensor,
