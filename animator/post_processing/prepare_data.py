@@ -64,12 +64,15 @@ class PostProcessingVideo:
                 std - image standard deviation,
                 transform - frame transformation.
         """     
-        self._processors = [processor]
+        self._processors = [processor, self._to_uint8]
 
         self.to_resized_tensor = transforms.Resize(size, antialias = True)
         self.norm = transforms.Normalize(mean, std)
 
         self.batch_size = batch_size
+    
+    def _to_uint8(self, images: Tensor) -> Tensor:
+        return (images * 255).to(uint8)
     
     def forward(self, video_chunc: Tensor) -> Tensor:
         for modifier in self._processors:
@@ -78,7 +81,8 @@ class PostProcessingVideo:
  
     def apply(self, video_path: str,
                     results_folder: str,
-                    interval: list[float, float] = [0.0, float('inf')],
+                    start: float = 0.0,
+                    length: float | None = None,
                     transformation: nn.Sequential | None = None) -> None:
         results_path = os.path.join(results_folder,
                                     'res_' + os.path.basename(video_path))
@@ -96,12 +100,22 @@ class PostProcessingVideo:
         video_info = streamer.get_src_stream_info(ind_video_stream)
         audio_info = streamer.get_src_stream_info(ind_audio_stream)
         streamer.add_basic_video_stream(frames_per_chunk=self.batch_size,
+                                        buffer_chunk_size= -1,
                                         frame_rate=video_info.frame_rate,
                                         hw_accel='cuda' if cuda.is_available() else None)
-        streamer.add_basic_audio_stream(frames_per_chunk= 3 * 4410,
-                                        buffer_chunk_size= 3 * 4410,
+
+        # Calculate audio batch size to keep it synced with the video
+        # details: https://pytorch.org/audio/stable/tutorials/streamreader_basic_tutorial.html#configuring-ouptut-streams
+        audio_batch_size = int(self.batch_size * audio_info.sample_rate / video_info.frame_rate)
+        streamer.add_basic_audio_stream(frames_per_chunk=audio_batch_size,
+                                        buffer_chunk_size=-1,
                                         sample_rate=audio_info.sample_rate)
-        streamer.seek(interval[0])
+        streamer.seek(start)
+        # Recalculate length in seconds into audio/video frames count
+        # if it's not provided, set a total count or a bit bigger
+        video_length = round(length * video_info.frame_rate) if length is not None else video_info.num_frames
+        audio_length = round(length * audio_info.sample_rate if length is not None
+                             else (audio_info.num_frames + 1) * audio_info.sample_rate)
 
         iter_ = streamer.stream()
         video_chunk, audio_chunk = next(iter_)
@@ -129,17 +143,22 @@ class PostProcessingVideo:
                                 encoder_format='fltp',
                                 encoder=audio_info.codec)
         with writer.open():
-            writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
-            writer.write_audio_chunk(1, audio_chunk)
-            #print('video: ', video_chunk.shape if video_chunk is not None else None)
-            #print('audio: ', audio_chunk.shape if audio_chunk is not None else None)
+            video_end = min(video_length, video_chunk.shape[0])
+            audio_end = min(audio_length, audio_chunk.shape[0])
+            writer.write_video_chunk(0, video_chunk.narrow(0, 0, video_end))
+            writer.write_audio_chunk(1, audio_chunk.narrow(0, 0, audio_end))
 
             for video_chunk, audio_chunk in iter_:
-                video_chunk = self.forward(self._chunk_transform(video_chunk, rotation, transformation))
-                #print('video: ', video_chunk.shape if video_chunk is not None else None)
-                writer.write_video_chunk(0, (video_chunk * 255).to(uint8))
-                #print('audio: ', audio_chunk.shape if audio_chunk is not None else None)
-                writer.write_audio_chunk(1, audio_chunk)
+                video_length -= self.batch_size
+                audio_length -= audio_batch_size
+                if video_length <= 0: break
+                video_end = min(video_length, video_chunk.shape[0])
+                audio_end = min(audio_length, audio_chunk.shape[0])
+                video_chunk = self.forward(self._chunk_transform(video_chunk.narrow(0, 0, video_end),
+                                                                 rotation,
+                                                                 transformation))
+                writer.write_video_chunk(0, video_chunk)
+                writer.write_audio_chunk(1, audio_chunk.narrow(0, 0, audio_end))
 
 
     def _chunk_transform(self, chunk: Tensor,

@@ -1,11 +1,7 @@
-import os
 import yaml
 from argparse import ArgumentParser
 
 import torch
-from torch.utils.data import DataLoader
-from torchvision import io
-import matplotlib.pyplot as plt
 
 from animator.style_transfer.cycle_gan_model import Generator
 from animator.utils.img_processing import ModelImgProcessing
@@ -35,7 +31,7 @@ def video_transform(video_path: str, weights_path: str, results_folder, hyperpar
                                             data_transform.std)
 
     video_transformer.apply(video_path,
-                            results_folder)
+                            results_folder, 11.0)
 
 if __name__ == '__main__':
     parser = ArgumentParser()
