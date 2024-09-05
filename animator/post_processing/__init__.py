@@ -1,1 +1,1 @@
-"""Prepare data to work with trained model."""
+"""Applications of the trained model for image/video  transformations."""
