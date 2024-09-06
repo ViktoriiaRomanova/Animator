@@ -1,14 +1,16 @@
-import yaml
 from argparse import ArgumentParser
 
 import torch
+import yaml
 
+from animator.post_processing.prepare_data import PostProcessingVideo
 from animator.style_transfer.cycle_gan_model import Generator
 from animator.utils.img_processing import ModelImgProcessing
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
-from animator.post_processing.prepare_data import PostProcessingVideo
 
-def video_transform(video_path: str, weights_path: str, results_folder, hyperparam_path: str) -> None:
+
+def video_transform(video_path: str, weights_path: str, results_folder: str, hyperparam_path: str) -> None:
+    """Transform video using trained model."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     with open(hyperparam_path, 'r') as file:
@@ -19,11 +21,13 @@ def video_transform(video_path: str, weights_path: str, results_folder, hyperpar
         img = img * torch.tensor(data_transform.std) + torch.tensor(data_transform.mean)
         img = img.permute((0, 3, 1, 2))
         return img
-    
-    img_processor = ModelImgProcessing(Generator(), 'genA', weights_path,
-                                                   mode = 'simple',
-                                                   transform = img_transformation,
-                                                   device = device)
+
+    img_processor = ModelImgProcessing(Generator(),
+                                       'genA',
+                                       weights_path,
+                                       mode = 'simple',
+                                       transform = img_transformation,
+                                       device = device)
 
     video_transformer = PostProcessingVideo(img_processor,
                                             data_transform.size[0],
@@ -33,12 +37,13 @@ def video_transform(video_path: str, weights_path: str, results_folder, hyperpar
     video_transformer.apply(video_path,
                             results_folder, 11.0)
 
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--pvideo', required=True)
     parser.add_argument('--pmodel', required=True)
     parser.add_argument('--pres', required=True)
     parser.add_argument('--hyperp', required=True)
-    
+
     args = parser.parse_args()
     video_transform(args.pvideo, args.pmodel, args.pres, args.hyperp)
