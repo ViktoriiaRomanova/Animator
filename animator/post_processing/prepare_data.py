@@ -1,8 +1,3 @@
-"""Prepare data to work with trained model.
-
-    TODO:
-    add a more detailed description.
-"""
 import os
 from warnings import warn
 

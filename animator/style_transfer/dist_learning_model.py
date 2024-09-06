@@ -1,33 +1,32 @@
-import random
-
-from argparse import Namespace
-from tqdm import tqdm
 import os
+import random
+from argparse import Namespace
 from warnings import warn
 
 import torch
-from torch import nn
 import torch.distributed as dist
+from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm
 
 from animator.base_distributed._distributed_model import BaseDist
-from .cycle_gan_model import Generator, Discriminator
-from .losses import AdversarialLoss, CycleLoss, IdentityLoss
-from ..utils.buffer import ImageBuffer
-from .metric_storage import MetricStorage
+from .cycle_gan_model import Discriminator, Generator
 from .get_dataset import GetDataset
+from .losses import AdversarialLoss, CycleLoss, IdentityLoss
+from .metric_storage import MetricStorage
+from ..utils.buffer import ImageBuffer
 from ..utils.parameter_storages.transfer_parameters import TrainingParams
-
 
 __all__ = ['DistLearning']
 
+
 class DistLearning(BaseDist):
-    def __init__(self, rank: int, init_args: Namespace, 
+    def __init__(self, rank: int, init_args: Namespace,
                  params: TrainingParams,
                  train_data: list[list[str], list[str]],
                  val_data: list[list[str], list[str]] | None
-                ) -> None:
+                 ) -> None:
         super().__init__(rank, params.distributed, params.main.random_state)
 
         self.init_args = init_args
@@ -47,11 +46,12 @@ class DistLearning(BaseDist):
                                size = params.data.size,
                                mean = params.data.mean,
                                std = params.data.std)
-        
+
         self.train_loader = self.prepare_dataloader(train_set, rank,
-                                                    self.world_size, self.batch_size, 
+                                                    self.world_size,
+                                                    self.batch_size,
                                                     self.random_seed)
-        
+
         # Create forward(A) and reverse(B) models
         # and initialize weights with Gaussian or Kaiming distribution
         self.genA = Generator()
@@ -85,21 +85,21 @@ class DistLearning(BaseDist):
 
         self.optim_gen = torch.optim.Adam(self.gens.parameters(),
                                           lr = params.optimizers.gen.lr,
-                                          betas = params.optimizers.gen.betas)        
+                                          betas = params.optimizers.gen.betas)
         self.optim_discA = torch.optim.Adam(self.discA.parameters(),
                                             lr = params.optimizers.discA.lr,
-                                            betas = params.optimizers.discA.betas)        
+                                            betas = params.optimizers.discA.betas)
         self.optim_discB = torch.optim.Adam(self.discB.parameters(),
                                             lr = params.optimizers.discB.lr,
                                             betas = params.optimizers.discB.betas)
-        
+
         def lambda_rule(epoch: int) -> float:
-            return (1.0 - (epoch - 100.0) / 101.0) if epoch > 100 else 1.0 
-        
+            return (1.0 - (epoch - 100.0) / 101.0) if epoch > 100 else 1.0
+
         self.scheduler_gen = torch.optim.lr_scheduler.LambdaLR(self.optim_gen, lr_lambda=lambda_rule)
         self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
         self.scheduler_discB = torch.optim.lr_scheduler.LambdaLR(self.optim_discB, lr_lambda=lambda_rule)
-        
+
         self.save_load_params = {'genA': self.genA,
                                  'discA': self.discA,
                                  'genB': self.genB,
@@ -113,23 +113,23 @@ class DistLearning(BaseDist):
                                  'scheduler_discB': self.scheduler_discB,
                                  'bufferX': self.fake_X_buffer,
                                  'bufferY': self.fake_Y_buffer}
-        
+
         self.start_epoch = 0
         if init_args.imodel is not None:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
-        
+
         self.epochs += self.start_epoch
 
         self.adv_loss = AdversarialLoss(params.loss.adversarial.ltype,
-                                      params.loss.adversarial.real_val,
-                                      params.loss.adversarial.fake_val,
-                                      self.device)
+                                        params.loss.adversarial.real_val,
+                                        params.loss.adversarial.fake_val,
+                                        self.device)
         self.cycle_loss = CycleLoss(params.loss.cycle.ltype,
-                                        params.loss.cycle.lambda_A,
-                                        params.loss.cycle.lambda_B)
+                                    params.loss.cycle.lambda_A,
+                                    params.loss.cycle.lambda_B)
         self.idn_loss = IdentityLoss(params.loss.identity.ltype,
-                                      params.loss.identity.lambda_idn)
-        
+                                     params.loss.identity.lambda_idn)
+
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
 
@@ -163,27 +163,27 @@ class DistLearning(BaseDist):
         return state
 
     def prepare_dataloader(self, data: GetDataset, rank: int,
-                    world_size: int, batch_size: int,
-                    seed: int) -> DataLoader:
+                           world_size: int, batch_size: int,
+                           seed: int) -> DataLoader:
         """
             Split dataset into N parts.
 
             Returns: DataLoader instance for current part.
         """
         sampler = DistributedSampler(data, num_replicas = world_size,
-                                    rank = rank, shuffle = True,
-                                    seed = seed, drop_last = True)
+                                     rank = rank, shuffle = True,
+                                     seed = seed, drop_last = True)
         data_loader = DataLoader(data, batch_size = batch_size,
-                                shuffle = False, drop_last = True,
-                                sampler = sampler,
-                                pin_memory = self.device.type != 'cpu',
-                                num_workers = 1,
-                                prefetch_factor = 16,
-                                multiprocessing_context = 'spawn',
-                                persistent_workers = self.device.type != 'cpu',
-                                pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
+                                 shuffle = False, drop_last = True,
+                                 sampler = sampler,
+                                 pin_memory = self.device.type != 'cpu',
+                                 num_workers = 1,
+                                 prefetch_factor = 16,
+                                 multiprocessing_context = 'spawn',
+                                 persistent_workers = self.device.type != 'cpu',
+                                 pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
         return data_loader
-    
+
     def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
         with torch.autocast(device_type = self.device.type,
@@ -245,21 +245,32 @@ class DistLearning(BaseDist):
             self.metrics.update('Adv_discB', 'True', lossB_true.detach().clone())
             self.metrics.update('Adv_discB', 'False', lossB_false.detach().clone())
 
-            self.metrics.update('Accuracy', 'disc_A', ans_disc_A_true, torch.tensor(1.0, device=self.device).expand_as(ans_disc_A_true))
-            self.metrics.update('Accuracy', 'disc_A', ans_disc_A_false, torch.tensor(0.0, device=self.device).expand_as(ans_disc_A_false))
+            self.metrics.update('Accuracy',
+                                'disc_A',
+                                ans_disc_A_true,
+                                torch.tensor(1.0, device=self.device).expand_as(ans_disc_A_true))
+            self.metrics.update('Accuracy',
+                                'disc_A',
+                                ans_disc_A_false,
+                                torch.tensor(0.0, device=self.device).expand_as(ans_disc_A_false))
 
-            self.metrics.update('Accuracy', 'disc_B', ans_disc_B_true, torch.tensor(1.0, device=self.device).expand_as(ans_disc_B_true))
-            self.metrics.update('Accuracy', 'disc_B', ans_disc_B_false, torch.tensor(0.0, device=self.device).expand_as(ans_disc_B_false))
-        
+            self.metrics.update('Accuracy',
+                                'disc_B',
+                                ans_disc_B_true,
+                                torch.tensor(1.0, device=self.device).expand_as(ans_disc_B_true))
+            self.metrics.update('Accuracy',
+                                'disc_B',
+                                ans_disc_B_false,
+                                torch.tensor(0.0, device=self.device).expand_as(ans_disc_B_false))
+
             del ans_disc_A_false, ans_disc_A_true, ans_disc_B_false, ans_disc_B_true
         return lossA, lossB
 
-    
     def backward_gen(self, loss: torch.Tensor) -> None:
         self.gens.zero_grad(True)
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optim_gen)
-    
+
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
         self.discs.zero_grad(True)
         self.scaler.scale(lossA).backward()
@@ -290,7 +301,7 @@ class DistLearning(BaseDist):
                 self.fake_Y_buffer.step()
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
-            
+
             self.metrics.update('Lr', 'gens',
                                 torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device))
             self.metrics.update('Lr', 'disc_A',
@@ -298,7 +309,7 @@ class DistLearning(BaseDist):
             self.metrics.update('Lr', 'disc_B',
                                 torch.tensor(self.scheduler_discB.get_last_lr()[0], device=self.device))
             self.metrics.epoch = epoch
-            
+
             self.scheduler_gen.step()
             self.scheduler_discA.step()
             self.scheduler_discB.step()
@@ -307,7 +318,7 @@ class DistLearning(BaseDist):
             self.metrics.compute()
             self.metrics.reset()
 
-            if self.rank == 0:            
+            if self.rank == 0:
                 if (epoch + 1) % 2 == 0:
                     if self.s3_storage is not None:
                         # Save model weights at S3 storage if the path to a bucket provided
@@ -315,12 +326,12 @@ class DistLearning(BaseDist):
                                    os.path.join(self.s3_storage, str(epoch) + '.pt'))
                     else:
                         # Otherwise, save at a remote machine
-                        warn(' '.join(('Intermediate model weights are saved at the remote machine and will be lost',
-                                       'after the end of the training process')))
+                        warn(' '.join(('Intermediate model weights are saved at the remote machine',
+                                       'and will be lost after the end of the training process')))
                         torch.save(self.save_model(epoch),
-                                   os.path.join(self.model_weights_dir, str(epoch) + '.pt'))               
+                                   os.path.join(self.model_weights_dir, str(epoch) + '.pt'))
         if self.rank == 0 and self.s3_storage is not None:
-            # Save final results at s3 storage          
+            # Save final results at s3 storage
             torch.save(self.save_model(self.epochs - 1),
                        os.path.join(self.s3_storage, str(self.epochs - 1) + '.pt'))
         dist.destroy_process_group()
