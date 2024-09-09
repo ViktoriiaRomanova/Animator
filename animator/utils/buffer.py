@@ -52,7 +52,9 @@ class ImageBuffer():
         image_list = [torch.empty(self.shape,
                                   device = self.device,
                                   dtype = self.buffer.dtype) for _ in range(self.worldsize)]
-        index_list = [torch.empty(1, dtype = torch.int32) for _ in range(self.worldsize)]
+        index_list = [torch.empty(1,
+                                  device=self.device,
+                                  dtype = torch.int32) for _ in range(self.worldsize)]
         all_gather(image_list, self.buffer)
         all_gather(index_list, torch.tensor([self.ind], device = self.device, dtype = torch.int32))
         for ind, ten in zip(index_list, image_list):

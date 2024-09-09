@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 set -e
-ch_dir=train_checkpoints/
+ch_dir=train_checkpoints/ukiyoe/
 
 # Move to script directory
 cd $(dirname "$0")

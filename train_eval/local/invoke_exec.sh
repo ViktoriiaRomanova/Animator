@@ -31,7 +31,7 @@ PARAMS=hyperparameters.yaml
 # Automatic move of the necessary data
 #scp ../style_transfer/train.py remote-machine:$MY_REMOTE_DIR # train
 #scp ../style_transfer/worker.py remote-machine:$MY_REMOTE_DIR # worker
-scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
+#scp -r ../../animator remote-machine:$MY_REMOTE_DIR # animator package
 scp ../style_transfer/hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
 #scp -r ../../datasets/transform_vangogh/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
@@ -44,6 +44,7 @@ docker --context remote-machine run --name animator \
 --gpus all cuda12.1.0:pytorch2.3.1 \
 python3 train.py \
 --dataset ${TRANSFORM} \
+--imodel ${IMODEL}2024_08_25_19_00_31/189.pt \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}

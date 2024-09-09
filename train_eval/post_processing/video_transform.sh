@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 set -e
 
-VIDEO_PATH=/home/viktoriia/Downloads/videotest.MOV
+VIDEO_PATH=/home/viktoriia/Downloads/videotest2.MOV
 IMODEL=train_eval/local/train_checkpoints/199_old.pt
 PARAMS=train_eval/style_transfer/hyperparameters.yaml
 RES_FOLDER=~/Downloads/

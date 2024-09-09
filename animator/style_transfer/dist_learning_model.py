@@ -133,8 +133,8 @@ class DistLearning(BaseDist):
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
 
-        #for model in self.models:
-            #model.compile()
+        for model in self.models:
+            model.compile()
 
     def load_model(self, path: str, device: torch.device) -> int:
         working_directory = os.getcwd()
@@ -319,7 +319,7 @@ class DistLearning(BaseDist):
             self.metrics.reset()
 
             if self.rank == 0:
-                if (epoch + 1) % 2 == 0:
+                if (epoch + 1) % 4 == 0:
                     if self.s3_storage is not None:
                         # Save model weights at S3 storage if the path to a bucket provided
                         torch.save(self.save_model(epoch),
