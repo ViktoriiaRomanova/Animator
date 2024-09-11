@@ -34,13 +34,14 @@ class PostProcessingDataset(Dataset, _bp.BaseDataset):
                 transform - picture transformation.
         """
         super().__init__(img_dir, data, transform, size, mean, std)
+        self.to_resized_tensor = transforms.Resize(size[0], antialias = True)
 
     def __getitem__(self, idx: int) -> Tensor:
         """Return image/transformed image by given index."""
         img_path = os.path.join(self.img_dir, self.imgnames[idx])
 
         image = io.read_image(img_path, mode = io.ImageReadMode.RGB)
-        image = transforms.functional.center_crop(image, output_size = max(image.shape))
+        #image = transforms.functional.center_crop(image, output_size = max(image.shape))
         image = self.norm(self.to_resized_tensor(image).div(255))
 
         return image if self.transforms is None else self.transforms(image)
@@ -112,8 +113,11 @@ class PostProcessingVideo:
             return
 
         metadata = ffmpeg.probe(video_path)
-        rotation = int(metadata['streams'][ind_video_stream].get('side_data_list',
-                                                                 [{}, {}])[1].get('rotation', 0) // 90)
+        try:
+            rotation = int(metadata['streams'][ind_video_stream].get('side_data_list',
+                                                                     [{}, {}])[1].get('rotation', 0) // 90)
+        except IndexError:
+            rotation = 0
 
         video_info = streamer.get_src_stream_info(ind_video_stream)
         audio_info = streamer.get_src_stream_info(ind_audio_stream)
