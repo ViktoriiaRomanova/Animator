@@ -20,7 +20,8 @@ IMG_PATH = '/home/viktoriia/Pictures/tmp/'
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
         data_transform = TrainingParams(**yaml.safe_load(file)).data
-    batch_size = 1
+    batch_size = 1 # for now keep it this way, 
+    # TODO: dataloader can't combine images of different size
     names = get_data(IMG_PATH)
     imges = PostProcessingDataset(IMG_PATH, names,
                                   data_transform.size,

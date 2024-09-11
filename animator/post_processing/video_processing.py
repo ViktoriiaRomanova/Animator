@@ -9,7 +9,12 @@ from animator.utils.img_processing import ModelImgProcessing
 from animator.utils.parameter_storages.transfer_parameters import TrainingParams
 
 
-def video_transform(video_path: str, weights_path: str, results_folder: str, hyperparam_path: str) -> None:
+def video_transform(video_path: str,
+                    weights_path: str,
+                    results_folder: str,
+                    hyperparam_path: str,
+                    start: float = 0.0,
+                    length: float | None = None) -> None:
     """Transform video using trained model."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -35,7 +40,7 @@ def video_transform(video_path: str, weights_path: str, results_folder: str, hyp
                                             data_transform.std)
 
     video_transformer.apply(video_path,
-                            results_folder, 11.0)
+                            results_folder, start, length)
 
 
 if __name__ == '__main__':
@@ -44,6 +49,8 @@ if __name__ == '__main__':
     parser.add_argument('--pmodel', required=True)
     parser.add_argument('--pres', required=True)
     parser.add_argument('--hyperp', required=True)
+    parser.add_argument('--start', default = 0.0, required = False)
+    parser.add_argument('--length',  default = None, required = False)
 
     args = parser.parse_args()
-    video_transform(args.pvideo, args.pmodel, args.pres, args.hyperp)
+    video_transform(args.pvideo, args.pmodel, args.pres, args.hyperp, args.start, args.length)

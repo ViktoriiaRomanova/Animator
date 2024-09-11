@@ -177,8 +177,8 @@ class DistLearning(BaseDist):
                                  shuffle = False, drop_last = True,
                                  sampler = sampler,
                                  pin_memory = self.device.type != 'cpu',
-                                 num_workers = 1,
-                                 prefetch_factor = 16,
+                                 num_workers = 2,
+                                 prefetch_factor = 32,
                                  multiprocessing_context = 'spawn',
                                  persistent_workers = self.device.type != 'cpu',
                                  pin_memory_device = self.device.type if self.device.type != 'cpu' else '')
@@ -319,7 +319,7 @@ class DistLearning(BaseDist):
             self.metrics.reset()
 
             if self.rank == 0:
-                if (epoch + 1) % 4 == 0:
+                if (epoch + 1) % 2 == 0:
                     if self.s3_storage is not None:
                         # Save model weights at S3 storage if the path to a bucket provided
                         torch.save(self.save_model(epoch),
