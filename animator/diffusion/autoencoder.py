@@ -4,6 +4,7 @@ from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDis
 from diffusers.models.modeling_outputs import AutoencoderKLOutput
 from huggingface_hub import PyTorchModelHubMixin
 from warnings import warn
+from peft import LoraConfig
 
 
 def encoder_forward(self, x: Tensor) -> Tensor:
@@ -40,9 +41,9 @@ def decoder_forward(self, x: Tensor, latent_embeds: Tensor | None = None) -> Ten
     return x
 
 
-class SCAutoencoderKL(nn.Module, PyTorchModelHubMixin):
+class SCAutoencoderKL(nn.Module):
 
-    def __init__(self, gamma: float = 1, *args, **kwargs):
+    def __init__(self, rank: int = 4, gamma: float = 1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-turbo", subfolder="vae")
         self.vae.encoder.forward = encoder_forward.__get__(self.vae.encoder, self.vae.encoder.__class__)
@@ -58,6 +59,18 @@ class SCAutoencoderKL(nn.Module, PyTorchModelHubMixin):
                 nn.Conv2d(128, 256, 1, 1, bias=False),
             ]
         )
+        # Initialize skip connections with zeros
+        def init_weights(sub_mod: nn.Module) -> None:
+            if isinstance(sub_mod, nn.Conv2d):
+                nn.init.constant_(sub_mod.weight, 1e-5)
+        self.vae.decoder.skip.apply(init_weights)
+
+        # Get target modules names for Lora
+        encoder_param_names = []
+        for name,
+
+        lora_config = LoraConfig(r=rank, init_lora_weights='gaussian', target_modules=)
+
 
     def decode(
         self,
