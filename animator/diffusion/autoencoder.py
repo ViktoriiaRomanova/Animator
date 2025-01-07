@@ -2,9 +2,8 @@ from diffusers import AutoencoderKL
 from torch import nn, Generator, Tensor
 from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDistribution
 from diffusers.models.modeling_outputs import AutoencoderKLOutput
-from huggingface_hub import PyTorchModelHubMixin
 from warnings import warn
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model
 
 
 def encoder_forward(self, x: Tensor) -> Tensor:
@@ -59,23 +58,38 @@ class SCAutoencoderKL(nn.Module):
                 nn.Conv2d(128, 256, 1, 1, bias=False),
             ]
         )
+
         # Initialize skip connections with zeros
         def init_weights(sub_mod: nn.Module) -> None:
             if isinstance(sub_mod, nn.Conv2d):
                 nn.init.constant_(sub_mod.weight, 1e-5)
+
         self.vae.decoder.skip.apply(init_weights)
 
-        # Get target modules names for Lora
-        encoder_param_names = []
-        for name,
+        # Target modules names for Lora
+        encoder_param_names = [
+            "conv1",
+            "conv2",
+            "conv_in",
+            "conv_shortcut",
+            "conv",
+            "conv_out",
+            "to_k",
+            "to_q",
+            "to_v",
+            "to_out.0",
+        ]
+        module_names_to_keep = ["decoder.skip.0", "decoder.skip.1", "decoder.skip.2", "decoder.skip.3"]
 
-        lora_config = LoraConfig(r=rank, init_lora_weights='gaussian', target_modules=)
+        lora_config = LoraConfig(
+            r=rank,
+            init_lora_weights="gaussian",
+            target_modules=encoder_param_names,
+            modules_to_save=module_names_to_keep,
+        )
+        self.vae = get_peft_model(self.vae, lora_config)
 
-
-    def decode(
-        self,
-        x: Tensor, *args, **kwargs
-    ) -> AutoencoderKLOutput | tuple[DiagonalGaussianDistribution]:
+    def decode(self, x: Tensor, *args, **kwargs) -> AutoencoderKLOutput | tuple[DiagonalGaussianDistribution]:
         return self.vae.decode(x, *args, **kwargs)
 
     def forward(
