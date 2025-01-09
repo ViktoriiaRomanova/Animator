@@ -11,7 +11,7 @@ Image/video translation results were obtained based on Cycle LSGAN architecture 
 
 ![alt text](assets/images/results_painters2.png)
 
-<video controls src="assets/video/combined_waterfall.mp4" title="Title"></video>
+<video src="https://github.com/user-attachments/assets/1a3ca1fd-7800-4a6e-834b-f0cb23404b20"></video>
 
 ## Main scheduled improvements
 
@@ -19,7 +19,8 @@ Image/video translation results were obtained based on Cycle LSGAN architecture 
 2. Modifications to the model to enable smooth video transitions.
     
     Illustration of flaws for current transforming videos frame by frame approach.
-    <video controls src="assets/video/combined_lake.mp4" title="Title"></video>
+    <video src="https://github.com/user-attachments/assets/8b7ed24f-a43b-4e3d-b95f-31ab8a3d9db8"></video>
+
 
 ## Useful links
 
