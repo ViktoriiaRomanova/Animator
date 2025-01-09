@@ -107,9 +107,14 @@ class SCAutoencoderKL(nn.Module):
         )
         self.vae = get_peft_model(self.vae, lora_config)
 
-    def decode(self, x: Tensor, *args, **kwargs) -> AutoencoderKLOutput | tuple[DiagonalGaussianDistribution]:
+    def decode(self, x: Tensor, *args, **kwargs) -> Tensor:
         """Decode rescale and sample images."""
-        return self.vae.decode(x, *args, **kwargs)
+        return self.vae.decode(x / self.vae.config.scaling_factor, *args, **kwargs).sample.clamp(-1, 1)
+
+    def encode(self, x: Tensor, *args, **kwargs):
+        # TODO finish this method to make consistent(decoder) scaling factor.
+        pass
+        
 
     def forward(
         self,
@@ -126,7 +131,7 @@ class SCAutoencoderKL(nn.Module):
             z = posterior.sample(generator=generator)
         else:
             z = posterior.mode()
-        dec = self.decode(z).sample
+        dec = self.decode(z)
 
         if not return_dict:
             return (dec,)
