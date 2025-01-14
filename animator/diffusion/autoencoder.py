@@ -108,7 +108,7 @@ class SCAutoencoderKL(nn.Module):
         )
         self.vae = get_peft_model(self.vae, lora_config)
 
-    def decode(self, x: Tensor, incoming_skip: list[Tensor], *args, **kwargs) -> tuple[Tensor, Tensor]:
+    def decode(self, x: Tensor, incoming_skip: list[Tensor], *args, **kwargs) -> Tensor:
         """Decode rescale and sample images."""
         if self.vae.post_quant_conv is not None:
             x = self.vae.post_quant_conv(x)
@@ -117,7 +117,7 @@ class SCAutoencoderKL(nn.Module):
 
     def encode(
         self, x: Tensor, sample_posterior: bool = True, generator: Generator | None = None, *args, **kwargs
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         """Encode images, sample and rescale tensor."""
         x, down_skip = self.vae.encoder.forward(x, *args, **kwargs)
 
@@ -134,7 +134,7 @@ class SCAutoencoderKL(nn.Module):
     def forward(
         self,
         x: Tensor,
-        sample_posterior: bool = False,
+        sample_posterior: bool = True,
         generator: Generator | None = None,
     ) -> Tensor:
         """Forward pass of autoencoder with skip."""
