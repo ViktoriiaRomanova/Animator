@@ -4,6 +4,7 @@ from abc import ABC
 
 from .transfer_parameters import TrainingParams
 from .extraction_parameters import ExtTrainingParams
+from .diffusion_parameters import DiffusionTrainingParams
 
 class BaseParamsHolder(ABC):
     def __init__(self,) -> None:
@@ -25,5 +26,7 @@ class ParamsHolder(BaseParamsHolder):
                 self.hyper_params = TrainingParams(**yaml.safe_load(file))
             elif ptype == 'Extraction':
                 self.hyper_params = ExtTrainingParams(**yaml.safe_load(file))
+            elif ptype == 'Diffusion':
+                self.hyper_params = DiffusionTrainingParams(**yaml.safe_load(file))
             else:
                 raise NotImplementedError('unknown type {} for parameter storage'.format(ptype))

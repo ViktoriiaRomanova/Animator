@@ -1,0 +1,51 @@
+main: 
+  random_state: 10
+  batch_size: 1
+  epochs: 200
+  buffer_size: 50 # Size of the buffer to store generated images
+
+data:
+  data_part: 0.999 # Proportions to split data for train and evaluation
+  sub_part_data: 1 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
+  size: [256, 256]
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+
+distributed:
+  world_size: 2  # Number of GPU/CPU
+  # Initialization the default distributed process group
+  backend: 'nccl' # 'nccl' -- for GPU, 'gloo' for CPU
+  port: '12345'
+  address: 'localhost'
+
+optimizers:
+  gen:
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  discA:
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  discB:
+    lr: 0.0002
+    betas: [0.5, 0.999]
+
+models:
+  unet_lora_rank: 8
+  vae_lora_rank: 4
+  gamma: 1
+
+loss:
+  adversarial:
+    ltype: 'MSE'
+    real_val: 1.0
+    fake_val: 0.0
+    adv_alpha: 0.5
+
+  cycle:
+    ltype: 'L1'
+    lambda_A: 10.0
+    lambda_B: 10.0
+
+  identity:
+    ltype: 'L1'
+    lambda_idn: 5
