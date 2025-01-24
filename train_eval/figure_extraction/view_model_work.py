@@ -17,7 +17,7 @@ IMG_PATH = 'train_eval/figure_extraction/test_img'
 if __name__ == '__main__':
     with open(HYPERPARAMETERS, 'r') as file:
         data_transform = ExtTrainingParams(**yaml.safe_load(file)).data
-    names = get_data(IMG_PATH)[15:21]
+    names = get_data(IMG_PATH)[15:20]
     imges = PostProcessingDataset(IMG_PATH, names,
                                   data_transform.size,
                                   data_transform.mean,
@@ -31,10 +31,25 @@ if __name__ == '__main__':
         img = img * tensor(data_transform.std) + tensor(data_transform.mean)
         return img
 
-    model_based_img_processor = ModelImgProcessing(UNet(), MODEL_WEIGHTS,
+    model_based_img_processor = ModelImgProcessing(UNet(), 'model', MODEL_WEIGHTS,
                                                    mode = 'prune',
                                                    transform = img_transformation)
     img_processor = ImgProcessing(img_transformation)
+
+    plt.rcParams.update({
+    "lines.color": "white",
+    "patch.edgecolor": "white",
+    "text.color": "black",
+    "axes.facecolor": "white",
+    "axes.edgecolor": "lightgray",
+    "axes.labelcolor": "white",
+    "xtick.color": "white",
+    "ytick.color": "white",
+    "grid.color": "lightgray",
+    "figure.facecolor": "black",
+    "figure.edgecolor": "black",
+    "savefig.facecolor": "black",
+    "savefig.edgecolor": "black"})
 
     for loaded_img in dataloader:
         fig, axs = plt.subplots(min(len(imges), 5), 2, squeeze = False)

@@ -1,0 +1,83 @@
+import os
+from argparse import Namespace
+
+import torch
+from torch import nn
+from vision_aided_loss import Discriminator
+
+from animator.base_distributed._distributed_model import BaseDist
+from .generator import GANTurboGenerator
+from .get_dataset import UnpairedDataset
+from .metric_storage import DiffusionMetricGroup
+from ..figure_extraction.unet_model import UNet
+from ..utils.buffer import ImageBuffer
+from ..utils.parameter_storages.diffusion_parameters import DiffusionTrainingParams
+
+
+class DiffusionDistLearning(BaseDist):
+    def __init__(
+        self,
+        rank: int,
+        init_args: Namespace,
+        params: DiffusionTrainingParams,
+        train_data: list[list[str], list[str]],
+        val_data: list[list[str], list[str]] | None,
+    ) -> None:
+        super().__init__(rank, params.distributed, params.main.random_state)
+
+        self.init_args = init_args
+        self.batch_size = params.main.batch_size
+        self.epochs = params.main.epochs
+
+        self.metrics = DiffusionMetricGroup(self.rank, 0)
+
+        # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
+        self.s3_storage = None
+        if rank == 0 and init_args.st is not None:
+            self.s3_storage = os.path.join(init_args.st, os.path.basename(self.model_weights_dir))
+            if not os.path.exists(self.s3_storage):
+                os.makedirs(self.s3_storage)
+
+        train_set = UnpairedDataset(
+            init_args.dataset, train_data, size=params.data.size, mean=params.data.mean, std=params.data.std
+        )
+
+        self.train_loader = self.prepare_dataloader(
+            train_set, rank, self.world_size, self.batch_size, self.random_seed
+        )
+
+        # Create forward(A) and reverse(B) models
+        self.genA = GANTurboGenerator(params.main.caption_forward, params.generator, self.device)
+        self.genB = GANTurboGenerator(params.main.caption_reverse, params.generator, self.device)
+
+        self.discA = Discriminator(
+            params.discriminator.cv_type, params.discriminator.loss_type, device=self.device
+        )
+        self.discB = Discriminator(
+            params.discriminator.cv_type, params.discriminator.loss_type, device=self.device
+        )
+
+        self.modifier = UNet("B").to(self.device)
+        state = torch.load(init_args.imodel, map_location=self.device, weights_only=True)["model"]
+        self.modifier.load_state_dict(state)
+        self.modifier.eval()
+        self.modifier.requires_grad_(False)
+
+        self.genA = self._ddp_wrapper(self.genA.to(self.device))
+        self.genB = self._ddp_wrapper(self.genB.to(self.device))
+        self.discA = self._ddp_wrapper(self.discA.to(self.device))
+        self.discB = self._ddp_wrapper(self.discB.to(self.device))
+        self.modifier = self._ddp_wrapper(self.modifier)
+
+        self.modelA = nn.ModuleList([self.genA, self.discA])
+        self.modelB = nn.ModuleList([self.genB, self.discB])
+
+        self.gens = nn.ModuleList([self.genA, self.genB])
+        self.discs = nn.ModuleList([self.discA, self.discB])
+
+        self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
+
+        self.scaler = torch.amp.GradScaler(enabled=self.device.type == "cuda")
+
+        self.fake_Y_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
+        self.fake_X_buffer = ImageBuffer(self.world_size, params.main.buffer_size)

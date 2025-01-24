@@ -3,6 +3,8 @@ main:
   batch_size: 1
   epochs: 200
   buffer_size: 50 # Size of the buffer to store generated images
+  caption_forward: "person to anime character"
+  caption_reverse: "anime character to person"
 
 data:
   data_part: 0.999 # Proportions to split data for train and evaluation
@@ -29,10 +31,14 @@ optimizers:
     lr: 0.0002
     betas: [0.5, 0.999]
 
-models:
+generator:
   unet_lora_rank: 8
   vae_lora_rank: 4
   gamma: 1
+
+discriminator:
+  cv_type: 'clip'
+  loss_type: 'multilevel_sigmoid_s'
 
 loss:
   adversarial:

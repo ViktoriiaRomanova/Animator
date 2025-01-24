@@ -41,11 +41,18 @@ class GeneratorParams:
     gamma: float
 
 @dataclass(kw_only = True)
+class DiscriminatorParams:
+    cv_type: str
+    loss_type: str
+
+@dataclass(kw_only = True)
 class MainParams:
     random_state: int
     batch_size: int
     epochs: int
     buffer_size: int
+    caption_forward: str
+    caption_reverse: str
 
 @dataclass(kw_only = True)
 class BaseLossParams:
@@ -79,5 +86,6 @@ class DiffusionTrainingParams:
     data: DataParams
     distributed: DistParams
     optimizers: AllOptimParams
-    models: GeneratorParams
+    generator: GeneratorParams
+    discriminator: DiscriminatorParams
     loss: LossParams
