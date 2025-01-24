@@ -26,7 +26,7 @@ class OptimParams:
     betas: tuple[float, float]
     def __post_init__(self):
         self.betas = tuple(self.betas)
-
+    weight_decay: float
 
 @nested_dataclass
 class AllOptimParams:
@@ -59,9 +59,7 @@ class BaseLossParams:
     ltype: str
 
 @dataclass(kw_only = True)
-class AdversarialParams(BaseLossParams):
-    real_val: float
-    fake_val: float
+class AdversarialParams:
     adv_alpha: float
 
 @dataclass(kw_only = True)
@@ -72,7 +70,6 @@ class CycleParams(BaseLossParams):
 @dataclass(kw_only = True)
 class IdentityParams(BaseLossParams):
     lambda_idn: float
-
 
 @nested_dataclass
 class LossParams:

@@ -1,4 +1,5 @@
 import os
+import random
 from argparse import Namespace
 
 import torch
@@ -9,6 +10,7 @@ from animator.base_distributed._distributed_model import BaseDist
 from .generator import GANTurboGenerator
 from .get_dataset import UnpairedDataset
 from .metric_storage import DiffusionMetricGroup
+from .losses import CycleLoss, IdentityLoss
 from ..figure_extraction.unet_model import UNet
 from ..utils.buffer import ImageBuffer
 from ..utils.parameter_storages.diffusion_parameters import DiffusionTrainingParams
@@ -81,3 +83,45 @@ class DiffusionDistLearning(BaseDist):
 
         self.fake_Y_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
         self.fake_X_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
+
+        self.optim_gen = torch.optim.AdamW(
+            self.gens.parameters(),
+            lr=params.optimizers.gen.lr,
+            betas=params.optimizers.gen.betas,
+            weight_decay=params.optimizers.gen.weight_decay,
+        )
+        self.optim_discA = torch.optim.AdamW(
+            self.discA.parameters(),
+            lr=params.optimizers.discA.lr,
+            betas=params.optimizers.discA.betas,
+            weight_decay=params.optimizers.discA.weight_decay,
+        )
+        self.optim_discB = torch.optim.AdamW(
+            self.discB.parameters(),
+            lr=params.optimizers.discB.lr,
+            betas=params.optimizers.discB.betas,
+            weight_decay=params.optimizers.discB.weight_decay,
+        )
+
+        def lambda_rule(epoch: int) -> float:
+            return 1.0
+
+        self.scheduler_gen = torch.optim.lr_scheduler.LambdaLR(self.optim_gen, lr_lambda=lambda_rule)
+        self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
+        self.scheduler_discB = torch.optim.lr_scheduler.LambdaLR(self.optim_discB, lr_lambda=lambda_rule)
+
+        self.start_epoch = 0
+        # TODO add model loading
+
+        self.epochs += self.start_epoch
+
+        self.cycle_loss = CycleLoss(
+            params.loss.cycle.ltype, params.loss.cycle.lambda_A, params.loss.cycle.lambda_B
+        )
+        self.idn_loss = IdentityLoss(params.loss.identity.ltype, params.loss.identity.lambda_idn)
+
+        # to get different (from previous use) random numbers after loading the model
+        random.seed(rank + self.start_epoch)
+
+        for model in self.models:
+            model.compile()

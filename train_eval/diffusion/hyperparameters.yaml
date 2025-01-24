@@ -22,29 +22,29 @@ distributed:
 
 optimizers:
   gen:
-    lr: 0.0002
-    betas: [0.5, 0.999]
+    lr: 5e-6
+    betas: [0.9, 0.999]
+    weight_decay: 0.01
   discA:
-    lr: 0.0002
-    betas: [0.5, 0.999]
+    lr: 5e-6
+    betas: [0.9, 0.999]
+    weight_decay: 0.01
   discB:
-    lr: 0.0002
-    betas: [0.5, 0.999]
+    lr: 5e-6
+    betas: [0.9, 0.999]
+    weight_decay: 0.01
 
 generator:
-  unet_lora_rank: 8
+  unet_lora_rank: 128
   vae_lora_rank: 4
   gamma: 1
 
 discriminator:
   cv_type: 'clip'
-  loss_type: 'multilevel_sigmoid_s'
+  loss_type: 'multilevel_sigmoid'
 
 loss:
   adversarial:
-    ltype: 'MSE'
-    real_val: 1.0
-    fake_val: 0.0
     adv_alpha: 0.5
 
   cycle:
@@ -54,4 +54,4 @@ loss:
 
   identity:
     ltype: 'L1'
-    lambda_idn: 5
+    lambda_idn: 1
