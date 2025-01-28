@@ -1,10 +1,12 @@
-main: 
+main:
   random_state: 10
   batch_size: 1
   epochs: 200
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
   caption_reverse: "anime character to person"
+  segmentation_model: "train_eval/figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt"
+  segmentation_model_type: "B" # A, B OR C (details in figure_extraction unet model description)
 
 data:
   data_part: 0.999 # Proportions to split data for train and evaluation
@@ -14,11 +16,11 @@ data:
   std: [0.5, 0.5, 0.5]
 
 distributed:
-  world_size: 2  # Number of GPU/CPU
+  world_size: 2 # Number of GPU/CPU
   # Initialization the default distributed process group
-  backend: 'nccl' # 'nccl' -- for GPU, 'gloo' for CPU
-  port: '12345'
-  address: 'localhost'
+  backend: "nccl" # 'nccl' -- for GPU, 'gloo' for CPU
+  port: "12345"
+  address: "localhost"
 
 optimizers:
   gen:
@@ -40,20 +42,20 @@ generator:
   gamma: 1
 
 discriminator:
-  cv_type: 'clip'
-  loss_type: 'multilevel_sigmoid'
+  cv_type: "clip"
+  loss_type: "multilevel_sigmoid"
 
 loss:
   adversarial:
     adv_alpha: 0.5
 
   cycle:
-    ltype: 'L1'
+    ltype: "L1"
     lambda_A: 1.0
     lambda_B: 1.0
     lambda_lpips: 10.0
 
   identity:
-    ltype: 'L1'
+    ltype: "L1"
     lambda_idn: 1
     lambda_lpips: 1

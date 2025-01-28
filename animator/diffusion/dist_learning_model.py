@@ -1,9 +1,12 @@
 import os
 import random
 from argparse import Namespace
+from warnings import warn
 
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from vision_aided_loss import Discriminator
 
@@ -60,17 +63,23 @@ class DiffusionDistLearning(BaseDist):
             params.discriminator.cv_type, params.discriminator.loss_type, device=self.device
         )
 
-        self.modifier = UNet("B").to(self.device)
-        state = torch.load(init_args.imodel, map_location=self.device, weights_only=True)["model"]
-        self.modifier.load_state_dict(state)
-        self.modifier.eval()
-        self.modifier.requires_grad_(False)
+        self.modifier = None
+        if params.main.segmentation_model is not None:
+            self.modifier = UNet(params.main.segmentation_model_type).to(self.device)
+            state = torch.load(params.main.segmentation_model, map_location=self.device, weights_only=True)[
+                "model"
+            ]
+            self.modifier.load_state_dict(state)
+            self.modifier.eval()
+            self.modifier.requires_grad_(False)
+        else:
+            self.modifier = None
+            warn("The segmentation model isn't provided, the segmentation part will be skiped")
 
         self.genA = self._ddp_wrapper(self.genA.to(self.device))
         self.genB = self._ddp_wrapper(self.genB.to(self.device))
         self.discA = self._ddp_wrapper(self.discA.to(self.device))
         self.discB = self._ddp_wrapper(self.discB.to(self.device))
-        self.modifier = self._ddp_wrapper(self.modifier)
 
         self.modelA = nn.ModuleList([self.genA, self.discA])
         self.modelB = nn.ModuleList([self.genB, self.discB])
@@ -111,8 +120,25 @@ class DiffusionDistLearning(BaseDist):
         self.scheduler_discA = torch.optim.lr_scheduler.LambdaLR(self.optim_discA, lr_lambda=lambda_rule)
         self.scheduler_discB = torch.optim.lr_scheduler.LambdaLR(self.optim_discB, lr_lambda=lambda_rule)
 
+        self.save_load_params = {
+            "genA": self.genA,
+            "discA": self.discA,
+            "genB": self.genB,
+            "discB": self.discB,
+            "optim_gen": self.optim_gen,
+            "optim_discA": self.optim_discA,
+            "optim_discB": self.optim_discB,
+            "scaler": self.scaler,
+            "scheduler_gen": self.scheduler_gen,
+            "scheduler_discA": self.scheduler_discA,
+            "scheduler_discB": self.scheduler_discB,
+            "bufferX": self.fake_X_buffer,
+            "bufferY": self.fake_Y_buffer,
+        }
+
         self.start_epoch = 0
-        # TODO add model loading
+        if init_args.imodel is not None:
+            self.start_epoch = self.load_model(init_args.imodel, self.device)
 
         self.epochs += self.start_epoch
 
@@ -139,3 +165,55 @@ class DiffusionDistLearning(BaseDist):
 
         for model in self.models:
             model.compile()
+
+    def save_model(self, epoch: int) -> dict:
+        state = {}
+        for key, param in self.save_load_params.items():
+            if isinstance(param, nn.Module):
+                state[key] = param.module.state_dict()
+            else:
+                state[key] = param.state_dict()
+        state["epoch"] = epoch
+        return state
+
+    def load_model(self, path: str, device: torch.device) -> int:
+        working_directory = os.getcwd()
+        weights_dir = os.path.join(working_directory, path)
+        state = torch.load(weights_dir, map_location=device)
+
+        for key, param in self.save_load_params.items():
+            if key not in state:
+                warn("Loaded state dict doesn`t contain {} its loading omitted".format(key))
+                continue
+            if isinstance(param, nn.Module):
+                param.module.load_state_dict(state[key])
+            else:
+                param.load_state_dict(state[key])
+
+        return state["epoch"] + 1
+
+    def prepare_dataloader(
+        self, data: UnpairedDataset, rank: int, world_size: int, batch_size: int, seed: int
+    ) -> DataLoader:
+        """
+        Split dataset into N parts.
+
+        Returns: DataLoader instance for current part.
+        """
+        sampler = DistributedSampler(
+            data, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=True
+        )
+        data_loader = DataLoader(
+            data,
+            batch_size=batch_size,
+            shuffle=False,
+            drop_last=True,
+            sampler=sampler,
+            pin_memory=self.device.type != "cpu",
+            num_workers=2,
+            prefetch_factor=32,
+            multiprocessing_context="spawn",
+            persistent_workers=self.device.type != "cpu",
+            pin_memory_device=self.device.type if self.device.type != "cpu" else "",
+        )
+        return data_loader

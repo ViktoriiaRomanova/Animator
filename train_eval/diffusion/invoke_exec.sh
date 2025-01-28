@@ -25,7 +25,7 @@ cd $(dirname "$0")
 
 TRANSFORM=datasets/transfer_test3/
 OUTPUT_MODEL=train_checkpoints/
-IMODEL='train_eval/figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt'
+IMODEL=/
 PARAMS=hyperparameters.yaml
 
 # Automatic move of the necessary data

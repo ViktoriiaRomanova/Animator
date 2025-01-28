@@ -28,7 +28,7 @@ class GANTurboGenerator(nn.Module):
         self.noise_scheduler_1step = DDPMScheduler.from_pretrained(
             "stabilityai/sd-turbo", subfolder="scheduler"
         )
-        # TODO trained model loading
+
         self.unet = LoRaUNet2DConditionModel(params.unet_lora_rank)
         self.vae = SCAutoencoderKL(rank=params.vae_lora_rank, gamma=params.gamma)
         self.device = device
