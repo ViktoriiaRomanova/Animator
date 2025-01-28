@@ -49,9 +49,11 @@ loss:
 
   cycle:
     ltype: 'L1'
-    lambda_A: 10.0
-    lambda_B: 10.0
+    lambda_A: 1.0
+    lambda_B: 1.0
+    lambda_lpips: 10.0
 
   identity:
     ltype: 'L1'
     lambda_idn: 1
+    lambda_lpips: 1

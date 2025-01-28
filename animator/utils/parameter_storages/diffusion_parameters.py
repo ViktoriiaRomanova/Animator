@@ -66,10 +66,12 @@ class AdversarialParams:
 class CycleParams(BaseLossParams):
     lambda_A: float
     lambda_B: float
+    lambda_lpips: float
 
 @dataclass(kw_only = True)
 class IdentityParams(BaseLossParams):
     lambda_idn: float
+    lambda_lpips: float
 
 @nested_dataclass
 class LossParams:

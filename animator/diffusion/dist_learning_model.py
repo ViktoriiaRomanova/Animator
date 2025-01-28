@@ -4,13 +4,14 @@ from argparse import Namespace
 
 import torch
 from torch import nn
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from vision_aided_loss import Discriminator
 
 from animator.base_distributed._distributed_model import BaseDist
 from .generator import GANTurboGenerator
 from .get_dataset import UnpairedDataset
-from .metric_storage import DiffusionMetricGroup
 from .losses import CycleLoss, IdentityLoss
+from .metric_storage import DiffusionMetricGroup
 from ..figure_extraction.unet_model import UNet
 from ..utils.buffer import ImageBuffer
 from ..utils.parameter_storages.diffusion_parameters import DiffusionTrainingParams
@@ -115,10 +116,23 @@ class DiffusionDistLearning(BaseDist):
 
         self.epochs += self.start_epoch
 
-        self.cycle_loss = CycleLoss(
-            params.loss.cycle.ltype, params.loss.cycle.lambda_A, params.loss.cycle.lambda_B
+        self.lpips = LearnedPerceptualImagePatchSimilarity("vgg", "mean", sync_on_compute=False).to(
+            self.device
         )
-        self.idn_loss = IdentityLoss(params.loss.identity.ltype, params.loss.identity.lambda_idn)
+
+        self.cycle_loss = CycleLoss(
+            self.lpips,
+            params.loss.cycle.ltype,
+            params.loss.cycle.lambda_A,
+            params.loss.cycle.lambda_B,
+            params.loss.cycle.lambda_lpips,
+        )
+        self.idn_loss = IdentityLoss(
+            self.lpips,
+            params.loss.identity.ltype,
+            params.loss.identity.lambda_idn,
+            params.loss.identity.lambda_lpips,
+        )
 
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
