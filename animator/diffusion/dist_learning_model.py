@@ -169,7 +169,15 @@ class DiffusionDistLearning(BaseDist):
     def save_model(self, epoch: int) -> dict:
         state = {}
         for key, param in self.save_load_params.items():
-            if isinstance(param, nn.Module):
+            if isinstance(param, GANTurboGenerator):
+                # Save only LoRa parameters
+                generator_state = {}
+                original_state_dict = param.module.state_dict()
+                for name in original_state_dict:
+                    if name.find("lora") != -1 or name.find("modules_to_save") != -1:
+                        generator_state[name] = original_state_dict[name]
+                state[key] = generator_state
+            elif isinstance(param, nn.Module):
                 state[key] = param.module.state_dict()
             else:
                 state[key] = param.state_dict()
@@ -185,7 +193,12 @@ class DiffusionDistLearning(BaseDist):
             if key not in state:
                 warn("Loaded state dict doesn`t contain {} its loading omitted".format(key))
                 continue
-            if isinstance(param, nn.Module):
+            if isinstance(param, GANTurboGenerator):
+                # Load only LoRa parameters
+                remains = param.module.load_state_dict(state[key], strict=False)
+                if len(remains.unexpected_keys) > 0:
+                    warn("Some parameters weren't loaded {}".format(remains.unexpected_keys))
+            elif isinstance(param, nn.Module):
                 param.module.load_state_dict(state[key])
             else:
                 param.load_state_dict(state[key])
