@@ -64,6 +64,7 @@ class MainParams:
     caption_reverse: str
     segmentation_model: str | None = None
     segmentation_model_type: str = "B"
+    save_step: int
 
 
 @dataclass(kw_only=True)

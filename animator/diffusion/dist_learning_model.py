@@ -4,17 +4,19 @@ from argparse import Namespace
 from warnings import warn
 
 import torch
+import torch.distributed as dist
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from vision_aided_loss import Discriminator
+from tqdm import tqdm
 
 from animator.base_distributed._distributed_model import BaseDist
 from .generator import GANTurboGenerator
 from .get_dataset import UnpairedDataset
 from .losses import CycleLoss, IdentityLoss
-from .metric_storage import DiffusionMetricGroup
+from .metric_storage import DiffusionMetricStorage
 from ..figure_extraction.unet_model import UNet
 from ..utils.buffer import ImageBuffer
 from ..utils.parameter_storages.diffusion_parameters import DiffusionTrainingParams
@@ -34,8 +36,9 @@ class DiffusionDistLearning(BaseDist):
         self.init_args = init_args
         self.batch_size = params.main.batch_size
         self.epochs = params.main.epochs
+        self.save_step = params.main.save_step
 
-        self.metrics = DiffusionMetricGroup(self.rank, 0)
+        self.metrics = DiffusionMetricStorage(self.rank, 0)
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         self.s3_storage = None
@@ -57,10 +60,10 @@ class DiffusionDistLearning(BaseDist):
         self.genB = GANTurboGenerator(params.main.caption_reverse, params.generator, self.device)
 
         self.discA = Discriminator(
-            params.discriminator.cv_type, params.discriminator.loss_type, device=self.device
+            params.discriminator.cv_type, loss_type=params.discriminator.loss_type, device=self.device
         )
         self.discB = Discriminator(
-            params.discriminator.cv_type, params.discriminator.loss_type, device=self.device
+            params.discriminator.cv_type, loss_type=params.discriminator.loss_type, device=self.device
         )
 
         self.modifier = None
@@ -146,6 +149,7 @@ class DiffusionDistLearning(BaseDist):
             self.device
         )
 
+        self.adv_alpha = params.loss.adv_alpha
         self.cycle_loss = CycleLoss(
             self.lpips,
             params.loss.cycle.ltype,
@@ -230,3 +234,144 @@ class DiffusionDistLearning(BaseDist):
             pin_memory_device=self.device.type if self.device.type != "cpu" else "",
         )
         return data_loader
+
+    def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+
+        with torch.autocast(
+            device_type=self.device.type, dtype=torch.float16, enabled=self.device.type == "cuda"
+        ):
+            self.discs.requires_grad_(False)
+
+            fakeY = self.genA(X)
+            cycle_fakeX = self.genB(fakeY)
+            fakeX = self.genB(Y)
+            cycle_fakeY = self.genA(fakeX)
+
+            self.fake_X_buffer.add(fakeX.detach().clone())
+            self.fake_Y_buffer.add(fakeY.detach().clone())
+
+            adv_lossA = self.discA(fakeY, for_G=True).mean()
+            adv_lossB = self.discB(fakeX, for_G=True).mean()
+            cycle_lossA, cycle_lossB = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
+            idn_lossX, idn_lossY = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+
+            loss = adv_lossA + adv_lossB + cycle_lossA + cycle_lossB + idn_lossX + idn_lossY
+
+            self.metrics.update("Total_loss", "gens", loss.detach().clone())
+            self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
+            self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
+            self.metrics.update("Cycle", "A", cycle_lossA.detach().clone())
+            self.metrics.update("Cycle", "B", cycle_lossB.detach().clone())
+            self.metrics.update("Identity", "X", idn_lossX.detach().clone())
+            self.metrics.update("Identity", "Y", idn_lossY.detach().clone())
+
+        return loss
+
+    def forward_disc(
+        self, X: torch.Tensor, Y: torch.Tensor, adv_alpha: float = 0.5
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+
+        with torch.autocast(
+            device_type=self.device.type, dtype=torch.float16, enabled=self.device.type == "cuda"
+        ):
+            self.discs.requires_grad_(True)
+
+            lossA_false = self.discA(self.fake_Y_buffer.get(), for_real=False) * adv_alpha
+            lossB_false = self.discB(self.fake_X_buffer.get(), for_real=False) * adv_alpha
+
+            lossA_true = self.discA(Y, for_real=True) * adv_alpha
+            lossB_true = self.discB(X, for_real=True) * adv_alpha
+
+            lossA = lossA_true + lossA_false
+            lossB = lossB_true + lossB_false
+
+            self.metrics.update("Total_loss", "disc_A", lossA.detach().clone())
+            self.metrics.update("Total_loss", "disc_B", lossB.detach().clone())
+            self.metrics.update("Adv_discA", "True", lossA_true.detach().clone())
+            self.metrics.update("Adv_discA", "False", lossA_false.detach().clone())
+            self.metrics.update("Adv_discB", "True", lossB_true.detach().clone())
+            self.metrics.update("Adv_discB", "False", lossB_false.detach().clone())
+
+        return lossA, lossB
+
+    def backward_gen(self, loss: torch.Tensor) -> None:
+        self.gens.zero_grad(True)
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optim_gen)
+
+    def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
+        self.discs.zero_grad(True)
+        self.scaler.scale(lossA).backward()
+        self.scaler.scale(lossB).backward()
+
+        self.scaler.step(self.optim_discA)
+        self.scaler.step(self.optim_discB)
+
+        # Update scaler after last "step"
+        self.scaler.update()
+
+    def execute(
+        self,
+    ) -> None:
+
+        for epoch in range(self.start_epoch, self.epochs):
+            self.train_loader.sampler.set_epoch(epoch)
+
+            self.models.train()
+
+            for x_batch, y_batch in tqdm(self.train_loader):
+                x_batch = x_batch.to(self.device, non_blocking=True)
+                y_batch = y_batch.to(self.device, non_blocking=True)
+                loss = self.forward_gen(x_batch, y_batch)
+                self.backward_gen(loss)
+                loss_disc_A, loss_disc_B = self.forward_disc(x_batch, y_batch, self.adv_alpha)
+                self.backward_disc(loss_disc_A, loss_disc_B)
+
+                self.fake_X_buffer.step()
+                self.fake_Y_buffer.step()
+
+                del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
+
+            self.metrics.update(
+                "Lr", "gens", torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device)
+            )
+            self.metrics.update(
+                "Lr", "disc_A", torch.tensor(self.scheduler_discA.get_last_lr()[0], device=self.device)
+            )
+            self.metrics.update(
+                "Lr", "disc_B", torch.tensor(self.scheduler_discB.get_last_lr()[0], device=self.device)
+            )
+            self.metrics.epoch = epoch
+
+            self.scheduler_gen.step()
+            self.scheduler_discA.step()
+            self.scheduler_discB.step()
+
+            # Send metrics into stdout. This channel going to be transferred into initial machine.
+            self.metrics.compute()
+            self.metrics.reset()
+
+            if self.rank == 0:
+                if (epoch + 1) % self.save_step == 0:
+                    if self.s3_storage is not None:
+                        # Save model weights at S3 storage if the path to a bucket provided
+                        torch.save(self.save_model(epoch), os.path.join(self.s3_storage, str(epoch) + ".pt"))
+                    else:
+                        # Otherwise, save at a remote machine
+                        warn(
+                            " ".join(
+                                (
+                                    "Intermediate model weights are saved at the remote machine",
+                                    "and will be lost after the end of the training process",
+                                )
+                            )
+                        )
+                        torch.save(
+                            self.save_model(epoch), os.path.join(self.model_weights_dir, str(epoch) + ".pt")
+                        )
+        if self.rank == 0 and self.s3_storage is not None:
+            # Save final results at s3 storage
+            torch.save(
+                self.save_model(self.epochs - 1), os.path.join(self.s3_storage, str(self.epochs - 1) + ".pt")
+            )
+        dist.destroy_process_group()
