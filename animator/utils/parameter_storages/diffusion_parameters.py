@@ -65,6 +65,7 @@ class MainParams:
     segmentation_model: str | None = None
     segmentation_model_type: str = "B"
     save_step: int
+    warm_up: int
 
 
 @dataclass(kw_only=True)

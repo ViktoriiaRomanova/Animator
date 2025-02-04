@@ -1,6 +1,7 @@
 import torch
 from matplotlib import pyplot as plt
 
+from animator.diffusion.segmentation import SegmentCharacter
 from animator.diffusion.generator import GANTurboGenerator
 from animator.utils.parameter_storages.params_holder import ParamsHolder
 
@@ -19,8 +20,15 @@ if __name__ == "__main__":
     caption = "anime style person"
 
     # Temporarily here
-    gen = GANTurboGenerator(caption, params.models)
+    modif = SegmentCharacter(params.main.segmentation_model,
+                             params.main.segmentation_model_type,
+                             torch.device('cpu'),
+                             params.data.mean,
+                             params.data.std,
+                             5)
+    gen = GANTurboGenerator(caption, params.generator)
     x = gen._random_fowrard()
+    x = modif(x)
     x = img_transformation(x).detach().numpy()
     plt.imshow(x)
     plt.show()

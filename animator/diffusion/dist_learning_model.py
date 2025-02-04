@@ -16,6 +16,7 @@ from animator.base_distributed._distributed_model import BaseDist
 from .generator import GANTurboGenerator
 from .get_dataset import UnpairedDataset
 from .losses import CycleLoss, IdentityLoss
+from .segmentation import SegmentCharacter
 from .metric_storage import DiffusionMetricStorage
 from ..figure_extraction.unet_model import UNet
 from ..utils.buffer import ImageBuffer
@@ -68,13 +69,12 @@ class DiffusionDistLearning(BaseDist):
 
         self.modifier = None
         if params.main.segmentation_model is not None:
-            self.modifier = UNet(params.main.segmentation_model_type).to(self.device)
-            state = torch.load(params.main.segmentation_model, map_location=self.device, weights_only=True)[
-                "model"
-            ]
-            self.modifier.load_state_dict(state)
-            self.modifier.eval()
-            self.modifier.requires_grad_(False)
+            self.modifier = SegmentCharacter(params.main.segmentation_model,
+                                             params.main.segmentation_model_type,
+                                             device=self.device,
+                                             mean=params.data.mean,
+                                             std=params.data.std,
+                                             warm_up=params.main.warm_up)
         else:
             self.modifier = None
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
@@ -142,6 +142,7 @@ class DiffusionDistLearning(BaseDist):
         self.start_epoch = 0
         if init_args.imodel is not None:
             self.start_epoch = self.load_model(init_args.imodel, self.device)
+            self.modifier.warm_up_update(-self.start_epoch * self.batch_size)
 
         self.epochs += self.start_epoch
 
@@ -242,9 +243,9 @@ class DiffusionDistLearning(BaseDist):
         ):
             self.discs.requires_grad_(False)
 
-            fakeY = self.genA(X)
+            fakeY = self.modifier(self.genA(X))
             cycle_fakeX = self.genB(fakeY)
-            fakeX = self.genB(Y)
+            fakeX = self.modifier(self.genB(Y))
             cycle_fakeY = self.genA(fakeX)
 
             self.fake_X_buffer.add(fakeX.detach().clone())
@@ -322,7 +323,7 @@ class DiffusionDistLearning(BaseDist):
             for x_batch, y_batch in tqdm(self.train_loader):
                 x_batch = x_batch.to(self.device, non_blocking=True)
                 y_batch = y_batch.to(self.device, non_blocking=True)
-                loss = self.forward_gen(x_batch, y_batch)
+                loss = self.forward_gen(x_batch, y_batch, epoch)
                 self.backward_gen(loss)
                 loss_disc_A, loss_disc_B = self.forward_disc(x_batch, y_batch, self.adv_alpha)
                 self.backward_disc(loss_disc_A, loss_disc_B)

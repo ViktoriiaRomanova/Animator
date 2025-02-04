@@ -1,3 +1,5 @@
+from warnings import warn
+
 import torch
 from torchvision.transforms import Normalize
 
@@ -6,7 +8,13 @@ from ..figure_extraction.unet_model import UNet
 
 class SegmentCharacter:
     def __init__(
-        self, path: str, model_type: str, device: torch.device, mean: tuple[float], std: tuple[float]
+        self,
+        path: str,
+        model_type: str,
+        device: torch.device,
+        mean: tuple[float],
+        std: tuple[float],
+        warm_up: int,
     ) -> None:
         self.modifier = UNet(model_type).to(device)
         state = torch.load(path, map_location=device, weights_only=True)["model"]
@@ -25,8 +33,18 @@ class SegmentCharacter:
         self.norm = torch.nn.Sequential(
             Normalize(inv_model_mean, inv_model_std, inplace=False), Normalize(unet_mean, unet_std)
         )
+        self._warm_up = warm_up  # Better to be proportional to the number of class users.
+
+    def warm_up_update(self, delta: int) -> None:
+        "Reduce/increase the amount of warm-up steps."
+        self._warm_up = max(0, self._warm_up + delta)
+        if self._warm_up == 0:
+            warn("Segmentation is on.")
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        if self._warm_up > 0:
+            self.warm_up_update(-x.shape[0])
+            return x
         data_type = x.dtype
         mask = (self.modifier(self.norm(x.detach().clone())) > 0).type(data_type)
         return mask * x

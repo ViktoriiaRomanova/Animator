@@ -5,9 +5,10 @@ main:
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
   caption_reverse: "anime character to person"
-  segmentation_model: "train_eval/figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt"
+  segmentation_model: "../figure_extraction/train_checkpoints/2024_06_18_09_21_24/99.pt"
   segmentation_model_type: "B" # A, B OR C (details in figure_extraction unet model description)
   save_step: 2 # Once in save_step epoch save model weights
+  warm_up: 1000 # number of steps without application of the segmentation 
 
 data:
   data_part: 0.999 # Proportions to split data for train and evaluation
