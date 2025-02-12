@@ -1,40 +1,40 @@
 main:
   random_state: 10
-  batch_size: 8
-  epochs: 200
+  batch_size: 1
+  epochs: 2
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
   caption_reverse: "anime character to person"
   segmentation_model: "trained_models/segmentation/99.pt"
   segmentation_model_type: "B" # A, B OR C (details in figure_extraction unet model description)
   save_step: 2 # Once in save_step epoch save model weights
-  warm_up: 1000 # number of steps without application of the segmentation 
+  warm_up: 1 # number of steps without application of the segmentation 
 
 data:
   data_part: 0.999 # Proportions to split data for train and evaluation
-  sub_part_data: 1 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
-  size: [512, 512]
+  sub_part_data: 0.001 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
+  size: [32, 32]
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
 
 distributed:
-  world_size: 2 # Number of GPU/CPU
+  world_size: 1 # Number of GPU/CPU
   # Initialization the default distributed process group
-  backend: "nccl" # 'nccl' -- for GPU, 'gloo' for CPU
+  backend: "gloo" # 'nccl' -- for GPU, 'gloo' for CPU
   port: "12345"
   address: "localhost"
 
 optimizers:
   gen:
-    lr: 5e-6
+    lr: 5.0e-6
     betas: [0.9, 0.999]
     weight_decay: 0.01
   discA:
-    lr: 5e-6
+    lr: 5.0e-6
     betas: [0.9, 0.999]
     weight_decay: 0.01
   discB:
-    lr: 5e-6
+    lr: 5.0e-6
     betas: [0.9, 0.999]
     weight_decay: 0.01
 

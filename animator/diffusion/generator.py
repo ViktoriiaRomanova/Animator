@@ -23,7 +23,8 @@ class GANTurboGenerator(nn.Module):
             truncation=True,
             return_tensors="pt",
         ).input_ids
-        self.caption_enc = text_encoder(tokens)[0].detach().clone()
+        caption_enc = text_encoder(tokens)[0].detach().clone()
+        self.register_buffer('caption_enc', caption_enc)
 
         self.noise_scheduler_1step = DDPMScheduler.from_pretrained(
             "stabilityai/sd-turbo", subfolder="scheduler"
@@ -58,3 +59,16 @@ class GANTurboGenerator(nn.Module):
 
         x = self.vae.decode(x, down_skip)
         return x
+
+
+def get_trainable_params(model: nn.Module, print_num: bool = False) -> list:
+    trainable_params = []
+    count, tot_count = 0, 0
+    for param in model.parameters():
+        if param.requires_grad:
+            trainable_params.append(param)
+            count += param.numel()
+        tot_count += param.numel()
+    if print_num:
+        print("Number of trainable parametes: {} of {}, {:.2%}".format(count, tot_count, count / tot_count))
+    return trainable_params

@@ -108,10 +108,10 @@ class BaseDist(ABC):
 
         module.apply(init_func)
 
-    def _ddp_wrapper(self, model: nn.Module) -> nn.Module:
+    def _ddp_wrapper(self, model: nn.Module, **kwargs) -> nn.Module:
         return DDP(model, device_ids = [self.device] if self.device.type != 'cpu' else None,
                    output_device = self.device if self.device.type != 'cpu' else None,
-                   find_unused_parameters = False)
+                   find_unused_parameters = False, **kwargs)
 
     def make_archive(self, source: str, destination: str,
                      name: str = 'train_checkpoints',

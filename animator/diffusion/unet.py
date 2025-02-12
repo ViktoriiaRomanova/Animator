@@ -25,7 +25,7 @@ class LoRaUNet2DConditionModel(nn.Module):
             "proj_in",
             "proj_out",
         ]
-        modules_to_save = "conv_in"
+        modules_to_save = ["conv_in"]
         lora_config = LoraConfig(
             r=rank,
             init_lora_weights="gaussian",

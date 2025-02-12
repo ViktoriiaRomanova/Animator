@@ -13,7 +13,7 @@ from vision_aided_loss import Discriminator
 from tqdm import tqdm
 
 from animator.base_distributed._distributed_model import BaseDist
-from .generator import GANTurboGenerator
+from .generator import GANTurboGenerator, get_trainable_params
 from .get_dataset import UnpairedDataset
 from .losses import CycleLoss, IdentityLoss
 from .segmentation import SegmentCharacter
@@ -63,6 +63,7 @@ class DiffusionDistLearning(BaseDist):
         self.discA = Discriminator(
             params.discriminator.cv_type, loss_type=params.discriminator.loss_type, device=self.device
         )
+
         self.discB = Discriminator(
             params.discriminator.cv_type, loss_type=params.discriminator.loss_type, device=self.device
         )
@@ -79,16 +80,18 @@ class DiffusionDistLearning(BaseDist):
             self.modifier = None
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
 
-        self.genA = self._ddp_wrapper(self.genA.to(self.device))
-        self.genB = self._ddp_wrapper(self.genB.to(self.device))
-        self.discA = self._ddp_wrapper(self.discA.to(self.device))
-        self.discB = self._ddp_wrapper(self.discB.to(self.device))
+        self.genA = self._ddp_wrapper(self.genA.to(self.device), broadcast_buffers=False)
+        self.genB = self._ddp_wrapper(self.genB.to(self.device), broadcast_buffers=False)
+        self.discA = self._ddp_wrapper(self.discA.to(self.device), broadcast_buffers=False)
+        self.discB = self._ddp_wrapper(self.discB.to(self.device), broadcast_buffers=False)
 
         self.modelA = nn.ModuleList([self.genA, self.discA])
         self.modelB = nn.ModuleList([self.genB, self.discB])
 
         self.gens = nn.ModuleList([self.genA, self.genB])
         self.discs = nn.ModuleList([self.discA, self.discB])
+
+        self.gens_trainable_params = get_trainable_params(self.gens, True)
 
         self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
@@ -98,7 +101,7 @@ class DiffusionDistLearning(BaseDist):
         self.fake_X_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
 
         self.optim_gen = torch.optim.AdamW(
-            self.gens.parameters(),
+            self.gens_trainable_params,
             lr=params.optimizers.gen.lr,
             betas=params.optimizers.gen.betas,
             weight_decay=params.optimizers.gen.weight_decay,
@@ -150,7 +153,7 @@ class DiffusionDistLearning(BaseDist):
             self.device
         )
 
-        self.adv_alpha = params.loss.adv_alpha
+        self.adv_alpha = params.loss.adversarial.adv_alpha
         self.cycle_loss = CycleLoss(
             self.lpips,
             params.loss.cycle.ltype,
@@ -168,13 +171,13 @@ class DiffusionDistLearning(BaseDist):
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
 
-        for model in self.models:
-            model.compile()
+        #for model in self.models:
+            #model.compile()
 
     def save_model(self, epoch: int) -> dict:
         state = {}
         for key, param in self.save_load_params.items():
-            if isinstance(param, GANTurboGenerator):
+            if key == "genA" or key == "genB":
                 # Save only LoRa parameters
                 generator_state = {}
                 original_state_dict = param.module.state_dict()
@@ -229,7 +232,7 @@ class DiffusionDistLearning(BaseDist):
             sampler=sampler,
             pin_memory=self.device.type != "cpu",
             num_workers=2,
-            prefetch_factor=32,
+            prefetch_factor=2,
             multiprocessing_context="spawn",
             persistent_workers=self.device.type != "cpu",
             pin_memory_device=self.device.type if self.device.type != "cpu" else "",
@@ -253,18 +256,16 @@ class DiffusionDistLearning(BaseDist):
 
             adv_lossA = self.discA(fakeY, for_G=True).mean()
             adv_lossB = self.discB(fakeX, for_G=True).mean()
-            cycle_lossA, cycle_lossB = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
-            idn_lossX, idn_lossY = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+            cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
+            idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
 
-            loss = adv_lossA + adv_lossB + cycle_lossA + cycle_lossB + idn_lossX + idn_lossY
+            loss = adv_lossA + adv_lossB + cycle_loss + idn_loss
 
             self.metrics.update("Total_loss", "gens", loss.detach().clone())
             self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
             self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
-            self.metrics.update("Cycle", "A", cycle_lossA.detach().clone())
-            self.metrics.update("Cycle", "B", cycle_lossB.detach().clone())
-            self.metrics.update("Identity", "X", idn_lossX.detach().clone())
-            self.metrics.update("Identity", "Y", idn_lossY.detach().clone())
+            self.metrics.update("Cycle", "", cycle_loss.detach().clone())
+            self.metrics.update("Identity", "", idn_loss.detach().clone())
 
         return loss
 
@@ -286,25 +287,26 @@ class DiffusionDistLearning(BaseDist):
             lossA = lossA_true + lossA_false
             lossB = lossB_true + lossB_false
 
-            self.metrics.update("Total_loss", "disc_A", lossA.detach().clone())
-            self.metrics.update("Total_loss", "disc_B", lossB.detach().clone())
-            self.metrics.update("Adv_discA", "True", lossA_true.detach().clone())
-            self.metrics.update("Adv_discA", "False", lossA_false.detach().clone())
-            self.metrics.update("Adv_discB", "True", lossB_true.detach().clone())
-            self.metrics.update("Adv_discB", "False", lossB_false.detach().clone())
+            self.metrics.update("Total_loss", "disc_A", lossA.detach().clone().squeeze())
+            self.metrics.update("Total_loss", "disc_B", lossB.detach().clone().squeeze())
+            self.metrics.update("Adv_discA", "True", lossA_true.detach().clone().squeeze())
+            self.metrics.update("Adv_discA", "False", lossA_false.detach().clone().squeeze())
+            self.metrics.update("Adv_discB", "True", lossB_true.detach().clone().squeeze())
+            self.metrics.update("Adv_discB", "False", lossB_false.detach().clone().squeeze())
 
         return lossA, lossB
 
     def backward_gen(self, loss: torch.Tensor) -> None:
         self.gens.zero_grad(True)
         self.scaler.scale(loss).backward()
+        nn.utils.clip_grad_norm_(self.gens_trainable_params, 10)
         self.scaler.step(self.optim_gen)
 
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
         self.discs.zero_grad(True)
         self.scaler.scale(lossA).backward()
         self.scaler.scale(lossB).backward()
-
+        nn.utils.clip_grad_norm_(self.discs.parameters(), 10)
         self.scaler.step(self.optim_discA)
         self.scaler.step(self.optim_discB)
 
@@ -323,9 +325,11 @@ class DiffusionDistLearning(BaseDist):
             for x_batch, y_batch in tqdm(self.train_loader):
                 x_batch = x_batch.to(self.device, non_blocking=True)
                 y_batch = y_batch.to(self.device, non_blocking=True)
-                loss = self.forward_gen(x_batch, y_batch, epoch)
+                loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
-                loss_disc_A, loss_disc_B = self.forward_disc(x_batch, y_batch, self.adv_alpha)
+                loss_disc_A, loss_disc_B = self.forward_disc(self.modifier(x_batch),
+                                                             self.modifier(y_batch),
+                                                             self.adv_alpha)
                 self.backward_disc(loss_disc_A, loss_disc_B)
 
                 self.fake_X_buffer.step()

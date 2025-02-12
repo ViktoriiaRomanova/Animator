@@ -24,32 +24,33 @@ set -e
 cd $(dirname "$0")
 
 TRANSFORM=datasets/diffusion/
-OUTPUT_MODEL=train_checkpoints/
-IMODEL=train_checkpoints/
-PARAMS=hyperparameters.yaml
+OUTPUT_MODEL=diffusion/train_checkpoints/
+IMODEL=diffusion/train_checkpoints/
+PARAMS=diffusion/hyperparameters.yaml
 
 # Automatic move of the necessary data
-#scp ../train.py remote-machine:$MY_REMOTE_DIR # train
-#scp ../worker.py remote-machine:$MY_REMOTE_DIR # worker
-#scp -r ../../../animator remote-machine:$MY_REMOTE_DIR # animator package
-scp ../hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
+scp ../train.py remote-machine:$MY_REMOTE_DIR/diffusion # train
+#scp ../worker.py remote-machine:$MY_REMOTE_DIR/diffusion # worker
+scp -r ../../../animator remote-machine:$MY_REMOTE_DIR # animator package
+scp ../hyperparameters.yaml remote-machine:$MY_REMOTE_DIR/diffusion # hyperparameters
 #scp -r ../../../datasets/diffusion/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../diffusion/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
 
 docker --context remote-machine run --name animator \
 --mount type=bind,source="$MY_REMOTE_DIR",target=/workspace \
+--mount type=bind,source=/root/.cache/,target=/root/.cache/ \
 --rm \
 -w /workspace/ \
 --shm-size=1g \
---gpus all cuda12.1.0:pytorch2.3.1 \
-python3 train.py \
+--gpus all cuda_new:12.8.0 \
+python3 diffusion/train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
 
 # Get the name of the last obtained weights
-WNAME=$(ssh remote-machine "find viktoriia/Animator/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')
+WNAME=$(ssh remote-machine "find viktoriia/Animator/diffusion/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')
 
 # Create a directory if it does not exist 
 if [ ! -d train_checkpoints/ ]; then
