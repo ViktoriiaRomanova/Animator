@@ -70,12 +70,14 @@ class DiffusionDistLearning(BaseDist):
 
         self.modifier = None
         if params.main.segmentation_model is not None:
-            self.modifier = SegmentCharacter(params.main.segmentation_model,
-                                             params.main.segmentation_model_type,
-                                             device=self.device,
-                                             mean=params.data.mean,
-                                             std=params.data.std,
-                                             warm_up=params.main.warm_up)
+            self.modifier = SegmentCharacter(
+                params.main.segmentation_model,
+                params.main.segmentation_model_type,
+                device=self.device,
+                mean=params.data.mean,
+                std=params.data.std,
+                warm_up=params.main.warm_up,
+            )
         else:
             self.modifier = None
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
@@ -171,8 +173,8 @@ class DiffusionDistLearning(BaseDist):
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
 
-        #for model in self.models:
-            #model.compile()
+        # for model in self.models:
+        # model.compile()
 
     def save_model(self, epoch: int) -> dict:
         state = {}
@@ -201,7 +203,7 @@ class DiffusionDistLearning(BaseDist):
             if key not in state:
                 warn("Loaded state dict doesn`t contain {} its loading omitted".format(key))
                 continue
-            if isinstance(param, GANTurboGenerator):
+            if key == "genA" or key == "genB":
                 # Load only LoRa parameters
                 remains = param.module.load_state_dict(state[key], strict=False)
                 if len(remains.unexpected_keys) > 0:
@@ -327,9 +329,9 @@ class DiffusionDistLearning(BaseDist):
                 y_batch = y_batch.to(self.device, non_blocking=True)
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
-                loss_disc_A, loss_disc_B = self.forward_disc(self.modifier(x_batch),
-                                                             self.modifier(y_batch),
-                                                             self.adv_alpha)
+                loss_disc_A, loss_disc_B = self.forward_disc(
+                    self.modifier(x_batch), self.modifier(y_batch), self.adv_alpha
+                )
                 self.backward_disc(loss_disc_A, loss_disc_B)
 
                 self.fake_X_buffer.step()
