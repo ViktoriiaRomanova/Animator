@@ -9,32 +9,45 @@ from torchvision import io
 
 from ..utils import _base_preprocessing_data as _bp
 
-__all__ = ['UnpairedDataset']
+__all__ = ["UnpairedDataset"]
+
 
 class UnpairedDataset(Dataset, _bp.BaseDataset):
     """Prepare data for DataLoader."""
 
-    def __init__(self, img_dir: str, data: list[list[str], list[str]],
-                 size: list[int, int],
-                 mean: tuple[float, float, float],
-                 std: tuple[float, float, float],
-                 transform: nn.Module | transforms.Compose | None = None
-                ) -> None:
+    def __init__(
+        self,
+        img_dir: str,
+        data: list[list[str], list[str]],
+        size: list[int, int],
+        mean: tuple[float, float, float],
+        std: tuple[float, float, float],
+        transform: nn.Module | transforms.Compose | None = None,
+        for_train: bool = True,
+    ) -> None:
         """
-            Args:
-                * dataset directory,
-                * list of filenames,
-                * picture transformation.
+        Args:
+            * dataset directory,
+            * list of filenames,
+            * picture transformation.
         """
         super().__init__(img_dir, data, transform, size, mean, std)
-        self.to_resized_tensor = transforms.Compose([
-            transforms.Resize(size[0] + 30,
-                              interpolation = transforms.InterpolationMode.BICUBIC,
-                              antialias = True),])
-        self.img_dir_x = os.path.join(self.img_dir, 'domainX')
-        self.img_dir_y = os.path.join(self.img_dir, 'domainY')
+        self.for_train = for_train
+        self.to_resized_tensor = transforms.Compose(
+            [
+                transforms.Resize(
+                    size[0] + (30 if self.for_train else 0),
+                    interpolation=transforms.InterpolationMode.BICUBIC,
+                    antialias=True,
+                ),
+            ]
+        )
+        self.img_dir_x = os.path.join(self.img_dir, "domainX")
+        self.img_dir_y = os.path.join(self.img_dir, "domainY")
 
-    def __len__(self,) -> int:
+    def __len__(
+        self,
+    ) -> int:
         """Return the number of pictures in the biggest dataset."""
         return max(len(self.imgnames[0]), len(self.imgnames[1]))
 
@@ -48,11 +61,17 @@ class UnpairedDataset(Dataset, _bp.BaseDataset):
             ind_y = idx
         img_x_path = os.path.join(self.img_dir_x, self.imgnames[0][ind_x])
         img_y_path = os.path.join(self.img_dir_y, self.imgnames[1][ind_y])
-        
-        image_x = io.read_image(img_x_path, mode = io.ImageReadMode.RGB)
-        image_y = io.read_image(img_y_path, mode = io.ImageReadMode.RGB)
-        image_x = self.crop(self.norm(self.to_resized_tensor(image_x).div(255)))
-        image_y = self.crop(self.norm(self.to_resized_tensor(image_y).div(255)))
 
-        return (image_x, image_y) if self.transforms is None \
-               else (self.transforms(image_x), self.transforms(image_y))
+        image_x = io.read_image(img_x_path, mode=io.ImageReadMode.RGB)
+        image_y = io.read_image(img_y_path, mode=io.ImageReadMode.RGB)
+        image_x = self.norm(self.to_resized_tensor(image_x).div(255))
+        image_y = self.norm(self.to_resized_tensor(image_y).div(255))
+        if self.for_train:
+            image_x = self.crop(image_x)
+            image_y = self.crop(image_y)
+
+        return (
+            (image_x, image_y)
+            if self.transforms is None
+            else (self.transforms(image_x), self.transforms(image_y))
+        )

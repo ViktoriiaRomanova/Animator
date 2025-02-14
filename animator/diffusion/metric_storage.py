@@ -2,7 +2,7 @@ from json import dumps as jdumps
 
 import torch
 from torchmetrics import Metric
-from torchmetrics.classification import Accuracy
+from torchmetrics.image.fid import FrechetInceptionDistance as FID
 
 
 class ArbitraryMetric(Metric):
@@ -33,7 +33,8 @@ class MetricGroup:
         if name not in self.metrics:
             self.metrics[name] = self.type(**self.kwargs).to(val.device)
         if target is not None:
-            self.metrics[name].update(val, target)
+            self.metrics[name].update(val, real=False)
+            self.metrics[name].update(target, real=True)
         else:
             self.metrics[name].update(val)
 
@@ -64,8 +65,8 @@ class DiffusionMetricStorage:
         self, group_name: str, state_name: str, val: torch.Tensor, target: torch.Tensor | None = None
     ) -> None:
         if group_name not in self.groups:
-            if group_name.find("Accuracy") != -1:
-                self.groups[group_name] = MetricGroup(Accuracy, task="binary", sync_on_compute=True)
+            if group_name.find("FID") != -1:
+                self.groups[group_name] = MetricGroup(FID, feature=2048, normalize=True, sync_on_compute=True)
             else:
                 self.groups[group_name] = MetricGroup(ArbitraryMetric)
         self.groups[group_name].update(state_name, val, target)

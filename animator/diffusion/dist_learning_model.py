@@ -6,6 +6,7 @@ from warnings import warn
 import torch
 import torch.distributed as dist
 from torch import nn
+from torchvision.transforms import Normalize
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
@@ -51,10 +52,28 @@ class DiffusionDistLearning(BaseDist):
         train_set = UnpairedDataset(
             init_args.dataset, train_data, size=params.data.size, mean=params.data.mean, std=params.data.std
         )
+        val_set = UnpairedDataset(
+            init_args.dataset,
+            val_data,
+            size=params.data.size,
+            mean=params.data.mean,
+            std=params.data.std,
+            for_train=False,
+        )
 
         self.train_loader = self.prepare_dataloader(
             train_set, rank, self.world_size, self.batch_size, self.random_seed
         )
+        self.val_loader = self.prepare_dataloader(
+            val_set, rank, self.world_size, self.batch_size, self.random_seed
+        )
+        cur_model_mean = torch.tensor(params.data.mean, device=self.device)
+        cur_model_std = torch.tensor(params.data.std, device=self.device)
+
+        inv_model_std = 1 / cur_model_std
+        inv_model_mean = -cur_model_mean * inv_model_std
+
+        self.renorm_for_fid = Normalize(inv_model_mean, inv_model_std, inplace=False)
 
         # Create forward(A) and reverse(B) models
         self.genA = GANTurboGenerator(params.main.caption_forward, params.generator, self.device)
@@ -338,6 +357,16 @@ class DiffusionDistLearning(BaseDist):
                 self.fake_Y_buffer.step()
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
+
+            # Calculate FID
+            self.gens.eval()
+            for x_batch, y_batch in tqdm(self.val_loader):
+                with torch.no_grad():
+                    fakeY = self.genA(x_batch)
+                    fakeX = self.genB(y_batch)
+                    self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))
+                    self.metrics.update("FID", "Backward", fakeX, self.renorm_for_fid(x_batch))
+            self.gens.train()
 
             self.metrics.update(
                 "Lr", "gens", torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device)
