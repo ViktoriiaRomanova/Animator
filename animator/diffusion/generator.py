@@ -42,9 +42,11 @@ class GANTurboGenerator(nn.Module):
     ) -> Tensor:
         """Forward method with random input(for pretrained model evaluation only)."""
         self.noise_scheduler_1step.set_timesteps(1, device=self.device)
-        x = torch.randn(1, 4, 64, 64, device=self.device)
+        x = torch.randn(2, 4, 64, 64, device=self.device)
         for time in self.noise_scheduler_1step.timesteps:
-            noise = self.unet(x, time, encoder_hidden_states=self.caption_enc).sample
+            batch_size = x.shape[0]
+            hidden_states = self.caption_enc.expand(batch_size, -1, -1)
+            noise = self.unet(x, time, encoder_hidden_states=hidden_states).sample
             x = self.noise_scheduler_1step.step(noise, time, x, return_dict=True).prev_sample
         x = self.vae.decode(x, [])
         return x
@@ -54,7 +56,9 @@ class GANTurboGenerator(nn.Module):
         self.noise_scheduler_1step.set_timesteps(1, device=self.device)
         x, down_skip = self.vae.encode(x)
         for time in self.noise_scheduler_1step.timesteps:
-            noise = self.unet(x, time, encoder_hidden_states=self.caption_enc).sample
+            batch_size = x.shape[0]
+            hidden_states = self.caption_enc.expand(batch_size, -1, -1)
+            noise = self.unet(x, time, encoder_hidden_states=hidden_states).sample
             x = self.noise_scheduler_1step.step(noise, time, x, return_dict=True).prev_sample
 
         x = self.vae.decode(x, down_skip)
