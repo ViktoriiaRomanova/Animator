@@ -25,7 +25,7 @@ cd $(dirname "$0")
 
 TRANSFORM=datasets/diffusion/
 OUTPUT_MODEL=diffusion/train_checkpoints/
-IMODEL=diffusion/train_checkpoints/
+IMODEL=diffusion/train_checkpoints/2025_02_12_16_04_07/1.pt
 PARAMS=diffusion/hyperparameters.yaml
 
 # Automatic move of the necessary data
@@ -46,6 +46,7 @@ docker --context remote-machine run --name animator \
 python3 diffusion/train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
+--imodel ${IMODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
 
