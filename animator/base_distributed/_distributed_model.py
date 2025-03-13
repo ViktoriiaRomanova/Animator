@@ -14,17 +14,17 @@ from ..utils.parameter_storages.transfer_parameters import DistParams
 
 class BaseDist(ABC):
     """
-        This class is an abstract base class (ABC) for distributed training model.
+    This class is an abstract base class (ABC) for distributed training model.
 
-        It is a common core for implementing distributed training on N CPU/GPU.
-        It is obligatory to call the parent __init__ function in a descendants __init__ method.
-        To create a subclass, you need to implement the following functions:
-            - prepare_dataloader
-            - load_model
-            - save_model
+    It is a common core for implementing distributed training on N CPU/GPU.
+    It is obligatory to call the parent __init__ function in a descendants __init__ method.
+    To create a subclass, you need to implement the following functions:
+        - prepare_dataloader
+        - load_model
+        - save_model
     """
 
-    def __init__(self, rank: int, params: DistParams, random_state: int) -> None:
+    def __init__(self, rank: int, params: DistParams, random_state: int, shared_gpu: int) -> None:
         """Initialize the BaseDist class.
 
         Parameters:
@@ -48,14 +48,18 @@ class BaseDist(ABC):
         self.rank = rank
         self.world_size = params.world_size
         self.random_seed = random_state
+        self.shared_gpu = shared_gpu
 
         # Set GPU number for this process
-        if params.backend == 'nccl':
-            self.device = torch.device(rank)
+        if params.backend == "nccl":
+            self.device = []
+            self.generator = []
+            for sub_device in range(self.shared_gpu):
+                self.device.append(torch.device(rank * self.shared_gpu + sub_device))
+                self.generator.append(torch.Generator(device=self.device[-1]).manual_seed(random_state))
         else:
-            self.device = torch.device('cpu')
-
-        self.generator = torch.Generator(device=self.device).manual_seed(random_state)
+            self.device = [torch.device("cpu")]
+            self.generator = [torch.Generator(device=self.device).manual_seed(random_state)]
 
         # Setup the process group
         self.__setup(rank, params)
@@ -66,22 +70,24 @@ class BaseDist(ABC):
 
     def __setup(self, rank: int, params: DistParams) -> None:
         """Set up the process group."""
-        os.environ['MASTER_ADDR'] = params.address
-        os.environ['MASTER_PORT'] = params.port
+        os.environ["MASTER_ADDR"] = params.address
+        os.environ["MASTER_PORT"] = params.port
 
-        if self.device.type == 'cpu':
+        if self.device[0].type == "cpu":
             torch.set_num_threads(1)  # for test purposes
 
         # initialize the process group
         # 'nccl' -- for GPU
-        dist.init_process_group(params.backend,
-                                rank = rank, world_size = self.world_size)
+        dist.init_process_group(params.backend, rank=rank, world_size=self.world_size)
 
-    def __prepare_strorage_folders(self,) -> str:
+    def __prepare_strorage_folders(
+        self,
+    ) -> str:
         """Create/check directories for model weights storage."""
         working_directory = os.getcwd()
-        model_weights_dir = os.path.join(working_directory, 'train_checkpoints/',
-                                         datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
+        model_weights_dir = os.path.join(
+            working_directory, "train_checkpoints/", datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        )
 
         if not os.path.exists(model_weights_dir):
             os.makedirs(model_weights_dir)
@@ -90,17 +96,16 @@ class BaseDist(ABC):
 
     def _init_weights(self, module: nn.Module, init_type: str, mean: float, std: float) -> None:
         """Initialize model weights by a torch.nn.init function."""
+
         def init_func(sub_mod: nn.Module) -> None:
             module_to_init = {nn.Conv2d, nn.Linear, nn.ConvTranspose2d}
             if type(sub_mod) in module_to_init:
-                if init_type == 'normal':
+                if init_type == "normal":
                     nn.init.normal_(sub_mod.weight, mean, std)
-                elif init_type == 'kaiming':
-                    nn.init.kaiming_normal_(sub_mod.weight,
-                                            a = 0,
-                                            mode = 'fan_in')
+                elif init_type == "kaiming":
+                    nn.init.kaiming_normal_(sub_mod.weight, a=0, mode="fan_in")
                 else:
-                    raise NotImplementedError('Initialization method {} is not implemented'.format(init_type))
+                    raise NotImplementedError("Initialization method {} is not implemented".format(init_type))
                 nn.init.constant_(sub_mod.bias, 0.0)
             elif isinstance(sub_mod, nn.BatchNorm2d):
                 nn.init.normal_(sub_mod.weight, 1.0, std)
@@ -108,18 +113,23 @@ class BaseDist(ABC):
 
         module.apply(init_func)
 
-    def _ddp_wrapper(self, model: nn.Module, **kwargs) -> nn.Module:
-        return DDP(model, device_ids = [self.device] if self.device.type != 'cpu' else None,
-                   output_device = self.device if self.device.type != 'cpu' else None,
-                   find_unused_parameters = False, **kwargs)
+    def _ddp_wrapper(self, model: nn.Module, is_multy_gpu: bool = False, **kwargs) -> nn.Module:
+        is_multy_gpu |= self.device[0].type == "cpu"
+        return DDP(
+            model,
+            device_ids=[self.device[0]] if not is_multy_gpu else None,
+            output_device=self.device[0] if not is_multy_gpu else None,
+            find_unused_parameters=False,
+            **kwargs
+        )
 
-    def make_archive(self, source: str, destination: str,
-                     name: str = 'train_checkpoints',
-                     f_format: str = 'zip') -> None:
+    def make_archive(
+        self, source: str, destination: str, name: str = "train_checkpoints", f_format: str = "zip"
+    ) -> None:
         """
-            Archive model checkpoints.
+        Archive model checkpoints.
 
-            Name and directory set at initialization (config.yaml).
+        Name and directory set at initialization (config.yaml).
         """
         # Gets current model weights folder name
         archived_dir = os.path.basename(source)
@@ -128,14 +138,16 @@ class BaseDist(ABC):
         # Creates archive at main directory: /job/
         shutil.make_archive(name, f_format, root_dir, archived_dir)
         # Moves archive to requested directory
-        shutil.move('{}.{}'.format(name, f_format), destination)
+        shutil.move("{}.{}".format(name, f_format), destination)
 
     @abstractmethod
-    def prepare_dataloader(self,) -> DataLoader:
+    def prepare_dataloader(
+        self,
+    ) -> DataLoader:
         """
-            Split dataset into N parts.
+        Split dataset into N parts.
 
-            Returns: DataLoader instance for current part.
+        Returns: DataLoader instance for current part.
         """
         pass
 
@@ -151,6 +163,8 @@ class BaseDist(ABC):
         pass
 
     @abstractmethod
-    def save_model(self,) -> dict:
+    def save_model(
+        self,
+    ) -> dict:
         """Save model, optimizer, etc. state."""
         pass

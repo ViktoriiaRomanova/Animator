@@ -54,6 +54,7 @@ class GANTurboGenerator(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         """Forward with one step DDPMScheduler."""
         self.noise_scheduler_1step.set_timesteps(1, device=self.device)
+        x = x.to(device=self.device)
         x, down_skip = self.vae.encode(x)
         for time in self.noise_scheduler_1step.timesteps:
             batch_size = x.shape[0]

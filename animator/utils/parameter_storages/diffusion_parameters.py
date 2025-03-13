@@ -18,6 +18,7 @@ class DataParams:
 @dataclass(kw_only=True)
 class DistParams:
     world_size: int
+    shared_gpu: int
     backend: str
     port: str
     address: str

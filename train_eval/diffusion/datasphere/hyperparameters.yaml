@@ -1,7 +1,7 @@
 main:
   random_state: 10
-  batch_size: 1
-  epochs: 200
+  batch_size: 6
+  epochs: 2
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
   caption_reverse: "anime character to person"
@@ -19,6 +19,7 @@ data:
 
 distributed:
   world_size: 1 # Number of GPU/CPU
+  shared_gpu: 2 # Number of GPU to place one model
   # Initialization the default distributed process group
   backend: "nccl" # 'nccl' -- for GPU, 'gloo' for CPU
   port: "12345"

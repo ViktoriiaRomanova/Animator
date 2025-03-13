@@ -8,7 +8,7 @@ cmd: >
   --st ${RES_STORAGE}
 env:
   docker:
-    image: cr.yandex/crp9dqvp603lodovpio2/cuda12.8.0:new
+    image: cr.yandex/crp9dqvp603lodovpio2/cuda12.8.0:latest
     username: json_key
     password:
       secret-id: container-registry
@@ -28,7 +28,9 @@ inputs:
   - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints: OUTPUT_MODEL
-cloud-instance-type: g2.1
+cloud-instance-type: 
+  #- g1.2
+  - g2.2
 working-storage:
   type: SSD
   size: 100GB

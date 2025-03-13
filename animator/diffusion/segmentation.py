@@ -21,6 +21,7 @@ class SegmentCharacter:
         self.modifier.load_state_dict(state)
         self.modifier.eval()
         self.modifier.requires_grad_(False)
+        self.modifier.compile()
         unet_mean = torch.tensor([0.485, 0.456, 0.406], device=device)
         unet_std = torch.tensor([0.229, 0.224, 0.225], device=device)
 
@@ -34,6 +35,7 @@ class SegmentCharacter:
             Normalize(inv_model_mean, inv_model_std, inplace=False), Normalize(unet_mean, unet_std)
         )
         self._warm_up = warm_up  # Better to be proportional to the number of class users.
+        self.device = device
 
     def warm_up_update(self, delta: int) -> None:
         "Reduce/increase the amount of warm-up steps."
@@ -45,6 +47,8 @@ class SegmentCharacter:
         if self._warm_up > 0:
             self.warm_up_update(-x.shape[0])
             return x
+        input_device = x.device
+        x = x.to(self.device)
         data_type = x.dtype
         mask = (self.modifier(self.norm(x.detach().clone())) > 0).type(data_type)
-        return mask * x
+        return (mask * x).to(input_device)
