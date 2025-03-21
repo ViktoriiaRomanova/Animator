@@ -14,8 +14,8 @@ class GANTurboGenerator(nn.Module):
         """Load pretrained models and DDPMScheduler."""
         super().__init__()
         self.caption = caption
-        tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer")
-        text_encoder = CLIPTextModel.from_pretrained("stabilityai/sd-turbo", subfolder="text_encoder")
+        tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer", local_files_only=True)
+        text_encoder = CLIPTextModel.from_pretrained("stabilityai/sd-turbo", subfolder="text_encoder", local_files_only=True)
         tokens = tokenizer(
             caption,
             max_length=tokenizer.model_max_length,
@@ -24,7 +24,7 @@ class GANTurboGenerator(nn.Module):
             return_tensors="pt",
         ).input_ids
         caption_enc = text_encoder(tokens)[0].detach().clone()
-        self.register_buffer('caption_enc', caption_enc)
+        self.register_buffer("caption_enc", caption_enc)
 
         self.noise_scheduler_1step = DDPMScheduler.from_pretrained(
             "stabilityai/sd-turbo", subfolder="scheduler"

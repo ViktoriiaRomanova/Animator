@@ -28,7 +28,7 @@ inputs:
   - hyperparameters.yaml: PARAMS
 outputs:
   - train_checkpoints: OUTPUT_MODEL
-cloud-instance-type: 
+cloud-instance-type:
   #- g1.2
   - g2.2
 working-storage:

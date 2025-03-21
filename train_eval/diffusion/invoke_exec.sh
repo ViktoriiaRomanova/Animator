@@ -36,12 +36,12 @@ PARAMS=hyperparameters.yaml
 #scp -r ../../datasets/transform_vangogh/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../style_transfer/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
 
-#docker --context remote-machine run --name animator \
-#--mount type=bind,source="$MY_REMOTE_DIR",target=/workspace \
-#--rm \
-#-w /workspace/ \
-#--shm-size=1g \
-#--gpus all cuda12.1.0:pytorch2.3.1 \
+docker --context remote-machine run --name animator \
+--mount type=bind,source="$MY_REMOTE_DIR",target=/workspace \
+--rm \
+-w /workspace/ \
+--shm-size=1g \
+--gpus all cuda12.1.0:pytorch2.3.1 \
 python3 train.py \
 --dataset ${TRANSFORM} \
 --imodel ${IMODEL}2024_08_25_19_00_31/189.pt \

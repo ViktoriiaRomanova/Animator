@@ -9,7 +9,7 @@ class LoRaUNet2DConditionModel(nn.Module):
     def __init__(self, rank: int, *args, **kwargs) -> None:
         """Create UNet model with LoRa adapters and a trainable first layer."""
         super().__init__(*args, **kwargs)
-        self.unet = UNet2DConditionModel.from_pretrained("stabilityai/sd-turbo", subfolder="unet")
+        self.unet = UNet2DConditionModel.from_pretrained("stabilityai/sd-turbo", subfolder="unet", local_files_only=True)
         target_modules = [
             "conv1",
             "conv2",

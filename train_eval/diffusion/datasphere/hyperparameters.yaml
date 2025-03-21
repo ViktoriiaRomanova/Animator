@@ -1,6 +1,6 @@
 main:
   random_state: 10
-  batch_size: 6
+  batch_size: 1
   epochs: 2
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
@@ -13,7 +13,7 @@ main:
 data:
   data_part: 0.9 # Proportions to split data for train and evaluation
   sub_part_data: 1 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
-  size: [256, 256]
+  size: [512, 512]
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
 

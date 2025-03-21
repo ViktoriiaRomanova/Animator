@@ -28,5 +28,9 @@ if __name__ == "__main__":
     train_data = [train_dataX, train_dataY]
     val_data = [val_dataX, val_dataY]
 
+    # Set s3 storage folder to store cache
+    os.environ['HF_HOME'] = base_param.st + '/cache/'
+    os.environ['TORCH_HOME'] = base_param.st + '/cache/'
+
     mp.spawn(worker, args = (base_param, params, train_data, val_data),
                              nprocs = params.distributed.world_size)

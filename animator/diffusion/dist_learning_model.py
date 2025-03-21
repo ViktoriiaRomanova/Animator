@@ -180,6 +180,7 @@ class DiffusionDistLearning(BaseDist):
         self.lpips = LearnedPerceptualImagePatchSimilarity("vgg", "mean", sync_on_compute=False).to(
             self.device[0]
         )
+        self.lpips.compile()
 
         self.adv_alpha = params.loss.adversarial.adv_alpha
         self.cycle_loss = CycleLoss(
@@ -201,8 +202,8 @@ class DiffusionDistLearning(BaseDist):
         # to get different (from previous use) random numbers after loading the model
         random.seed(rank + self.start_epoch)
 
-        for model in self.models:
-            model.compile()
+        #for model in self.models:
+            #model.compile()
 
     def save_model(self, epoch: int) -> dict:
         state = {}
@@ -291,6 +292,7 @@ class DiffusionDistLearning(BaseDist):
             adv_lossB = self.discB(fakeX, for_G=True).mean().to(self.device[0])
 
             cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
+
             idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
 
             loss = adv_lossA + adv_lossB + cycle_loss + idn_loss
@@ -333,6 +335,7 @@ class DiffusionDistLearning(BaseDist):
     def backward_gen(self, loss: torch.Tensor) -> None:
         self.gens.zero_grad(True)
         self.scaler.scale(loss).backward()
+        self.scaler.unscale_(self.optim_gen)
         nn.utils.clip_grad_norm_(self.gens_trainable_params, 10)
         self.scaler.step(self.optim_gen)
 
@@ -340,6 +343,8 @@ class DiffusionDistLearning(BaseDist):
         self.discs.zero_grad(True)
         self.scaler.scale(lossA).backward()
         self.scaler.scale(lossB).backward()
+        self.scaler.unscale_(self.optim_discA)
+        self.scaler.unscale_(self.optim_discB)
         nn.utils.clip_grad_norm_(self.discs.parameters(), 10)
         self.scaler.step(self.optim_discA)
         self.scaler.step(self.optim_discB)
@@ -350,7 +355,6 @@ class DiffusionDistLearning(BaseDist):
     def execute(
         self,
     ) -> None:
-        torch.autograd.set_detect_anomaly(True)
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loader.sampler.set_epoch(epoch)
 
