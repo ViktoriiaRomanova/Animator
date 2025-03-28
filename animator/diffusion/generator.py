@@ -10,12 +10,12 @@ from animator.utils.parameter_storages.diffusion_parameters import GeneratorPara
 class GANTurboGenerator(nn.Module):
     """Combine models to form Cycle GAN Turbo Generator."""
 
-    def __init__(self, caption: str, params: GeneratorParams, device: str | torch.device = "cpu") -> None:
+    def __init__(self, caption: str, params: GeneratorParams) -> None:
         """Load pretrained models and DDPMScheduler."""
         super().__init__()
         self.caption = caption
-        tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer", local_files_only=True)
-        text_encoder = CLIPTextModel.from_pretrained("stabilityai/sd-turbo", subfolder="text_encoder", local_files_only=True)
+        tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer")
+        text_encoder = CLIPTextModel.from_pretrained("stabilityai/sd-turbo", subfolder="text_encoder")
         tokens = tokenizer(
             caption,
             max_length=tokenizer.model_max_length,
@@ -32,7 +32,6 @@ class GANTurboGenerator(nn.Module):
 
         self.unet = LoRaUNet2DConditionModel(params.unet_lora_rank)
         self.vae = SCAutoencoderKL(rank=params.vae_lora_rank, gamma=params.gamma)
-        self.device = device
         self.vae.eval()
         self.unet.eval()
 
@@ -41,8 +40,9 @@ class GANTurboGenerator(nn.Module):
         self,
     ) -> Tensor:
         """Forward method with random input(for pretrained model evaluation only)."""
-        self.noise_scheduler_1step.set_timesteps(1, device=self.device)
-        x = torch.randn(2, 4, 64, 64, device=self.device)
+        device = self.caption_enc.device
+        self.noise_scheduler_1step.set_timesteps(1, device=device)
+        x = torch.randn(2, 4, 64, 64, device=device)
         for time in self.noise_scheduler_1step.timesteps:
             batch_size = x.shape[0]
             hidden_states = self.caption_enc.expand(batch_size, -1, -1)
@@ -53,8 +53,9 @@ class GANTurboGenerator(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward with one step DDPMScheduler."""
-        self.noise_scheduler_1step.set_timesteps(1, device=self.device)
-        x = x.to(device=self.device)
+        device = self.caption_enc.device
+        self.noise_scheduler_1step.set_timesteps(1, device=device)
+        x = x.to(device=device)
         x, down_skip = self.vae.encode(x)
         for time in self.noise_scheduler_1step.timesteps:
             batch_size = x.shape[0]

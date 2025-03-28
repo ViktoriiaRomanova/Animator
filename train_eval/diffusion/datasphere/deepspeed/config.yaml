@@ -1,0 +1,36 @@
+name: diffusion_based_model
+desc: Script for training the cycleGAN-Turbo model (Distributed Data Parallel)
+cmd: >
+  deepspeed tmp3.py
+  --st ${RES_STORAGE}
+ # --dataset ${DIFFUSION}/
+ # --omodel ${OUTPUT_MODEL}
+ # --params ${PARAMS}
+env:
+  docker:
+    image: cr.yandex/crp9dqvp603lodovpio2/cuda12.8.0:latest
+    username: json_key
+    password:
+      secret-id: container-registry
+  python:
+    type: manual
+    version: 3.10
+    requirements-file: ../../../../requirements.txt
+    local-paths:
+      - tmp3.py
+      - ds_config.json
+      - ds_config_disc.json
+      - ../../../../animator
+datasets:
+  - bt1nk0q2rqtf5fjqof2l: DIFFUSION
+s3-mounts:
+  - bt1jehbu3fmqga41k2a3: RES_STORAGE
+#inputs:
+ # - hyperparameters.yaml: PARAMS
+outputs:
+  - train_checkpoints: OUTPUT_MODEL
+cloud-instance-type:
+  - gt4i.1
+working-storage:
+  type: SSD
+  size: 100GB

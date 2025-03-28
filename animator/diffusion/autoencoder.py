@@ -63,7 +63,7 @@ class SCAutoencoderKL(nn.Module):
 
         """
         super().__init__(*args, **kwargs)
-        self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-turbo", subfolder="vae", local_files_only=True)
+        self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-turbo", subfolder="vae")
         self.vae.encoder.forward = encoder_forward.__get__(self.vae.encoder, self.vae.encoder.__class__)
         self.vae.decoder.forward = decoder_forward.__get__(self.vae.decoder, self.vae.decoder.__class__)
         self.vae.decoder.gamma = gamma
