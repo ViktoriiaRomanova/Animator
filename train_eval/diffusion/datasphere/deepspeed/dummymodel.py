@@ -8,6 +8,8 @@ from torch.utils.data import Dataset
 from animator.diffusion.losses import CycleLoss, IdentityLoss
 import os
 import argparse
+from deepspeed.utils import safe_get_local_fp32_param, safe_get_local_grad, safe_get_full_fp32_param, safe_get_full_grad
+
 
 def get_trainable_params(model: nn.Module, print_num: bool = False) -> list:
     trainable_params = []
@@ -81,20 +83,36 @@ if __name__ == '__main__':
     cycle_loss = CycleLoss(lpips=lpips) #,device="cuda")
     idn_loss = IdentityLoss(lpips=lpips) #, device="cuda")
 
-    modelG1, optG1, loader, _ =  deepspeed.initialize(model=model1, training_data=data, config="ds_config.json")
-    modelG2, optG2, _, _ =  deepspeed.initialize(model=model2, config="ds_config.json")
+    modelG1, optG1, loader, _ =  deepspeed.initialize(model=model1, model_parameters=model1.parameters(), training_data=data, config="ds_config.json")
+    modelG2, optG2, _, _ =  deepspeed.initialize(model=model2, model_parameters=model2.parameters(), config="ds_config.json")
     modelD1, optD1, test_loader, _ = deepspeed.initialize(model=disc,  training_data=dummy_dataset, config="ds_config_disc.json")
     modelD2, optD2, _, _ = deepspeed.initialize(model=disc2, config="ds_config_disc.json")
 
-    for ind in range(3):
-        print(ind)
-        test_loader.data_sampler.set_epoch(ind)
-        for x in test_loader:
-            print(x)
+    #for ind in range(3):
+        #print(ind)
+        #test_loader.data_sampler.set_epoch(ind)
+        #for x in test_loader:
+            #print(x)
+
+    for name, p in modelG1.named_parameters():
+        print("G1: ", name, safe_get_full_fp32_param(p)[0])
+        break
+
+    for name, p in modelD1.named_parameters():
+        param = safe_get_full_fp32_param(p)
+        if param is None: continue
+        print("D1: ", name, param[0])
+        break
+
+    modelG1.requires_grad_ = True
+    modelG2.requires_grad_ = True
+    modelG1.train()
+    modelG2.train()
 
     for x, y in loader:
         x = x.to(device)
         y = y.to(device)
+    
         fakeY = modelG1(x)
         cycle_x = modelG2(fakeY)
 
@@ -115,8 +133,22 @@ if __name__ == '__main__':
 
         modelG1._backward_epilogue()
         modelG2._backward_epilogue()
+        for name, p in modelG1.named_parameters():
+            print("Grad G ", name, safe_get_full_grad(p)[0])
+            break
         modelG1.step()
         modelG2.step()
+        modelG1.optimizer.zero_grad()
+        modelG2.optimizer.zero_grad()
+
+        for name, p in modelG1.named_parameters():
+            print("G1: updated G ", name, safe_get_full_fp32_param(p)[0])
+            break 
+        for name, p in modelD1.named_parameters():
+            param = safe_get_full_fp32_param(p)
+            if param is None: continue
+            print("D1: updated G ", name, param[0])
+            break
 
         modelD2.requires_grad_ = True
         modelD1.requires_grad_ = True
@@ -129,17 +161,55 @@ if __name__ == '__main__':
 
         lossA = lossA_true + lossA_false
         lossB = lossB_true + lossB_false
-        """
+        
         lossA.backward()
         modelD1._backward_epilogue()
+        for name, p in modelD1.named_parameters():
+            param = safe_get_full_grad(p)
+            if param is None: continue
+            print("Grad D ", name, param[0])
+            break
         modelD1.step()
 
         lossB.backward()
         modelD2._backward_epilogue()
-        modelD2.step()"""
+        modelD2.step()
+
+        for name, p in modelG1.named_parameters():
+            print("G1: updated G and D ", name, safe_get_full_fp32_param(p)[0])
+            break
+
+        for name, p in modelD1.named_parameters():
+            param = safe_get_full_fp32_param(p)
+            if param is None: continue
+            print("D1: updated G and D", name, param[0])
+            break
+        
+        """
 
         modelD1.backward(lossA)
+        for name, p in modelD1.named_parameters():
+            param = safe_get_local_grad(p)
+            if param is None: continue
+            print("Grad D ", name, param[0])
+            break
         modelD1.step()
 
         modelD2.backward(lossB)
         modelD2.step()
+
+        for name, p in modelG1.named_parameters():
+            print("G1: updated G and D ", name, safe_get_local_fp32_param(p)[0])
+            break
+
+        for name, p in modelD1.named_parameters():
+            param = safe_get_local_fp32_param(p)
+            if param is None: continue
+            print("D1: updated G and D", name, param[0])
+            break
+        """
+
+        
+
+
+# docker run -it --name animator --mount type=bind,source="$MY_REMOTE_DIR",target=/workspace --mount type=bind,source=/root/.cache/,target=/root/.cache/ --rm -w /workspace/ --shm-size=1g --gpus all cuda_new:deepspeed1
