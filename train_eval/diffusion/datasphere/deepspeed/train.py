@@ -1,5 +1,7 @@
 import os
 
+from torch import multiprocessing as mp
+
 from animator.diffusion.deep_speed_learning_model import DiffusionLearning
 from animator.utils.preprocessing_data import PreprocessingData
 from animator.utils.parameter_storages.params_holder import ParamsHolder
@@ -7,7 +9,7 @@ from animator.utils.parameter_storages.params_holder import ParamsHolder
 
 if __name__ == "__main__":
     
-    params_holder = ParamsHolder("Diffusion")
+    params_holder = ParamsHolder("DS_Diffusion")
     base_param, params = params_holder.datasphere_params, params_holder.hyper_params
 
     pr_data = PreprocessingData(params.data.data_part, lambda x: True)
@@ -27,8 +29,8 @@ if __name__ == "__main__":
     val_data = [val_dataX, val_dataY]
 
     # Set s3 storage folder to store cache
-    os.environ['HF_HOME'] = base_param.st + '/cache/'
-    os.environ['TORCH_HOME'] = base_param.st + '/cache/'
+    #os.environ['HF_HOME'] = base_param.st + '/cache/'
+    #os.environ['TORCH_HOME'] = base_param.st + '/cache/'
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
