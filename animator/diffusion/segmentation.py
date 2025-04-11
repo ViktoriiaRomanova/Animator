@@ -16,12 +16,14 @@ class SegmentCharacter:
         std: tuple[float],
         warm_up: int,
     ) -> None:
+        self.dtype = torch.float16
         self.modifier = UNet(model_type).to(device)
         state = torch.load(path, map_location=device, weights_only=True)["model"]
         self.modifier.load_state_dict(state)
         self.modifier.eval()
         self.modifier.requires_grad_(False)
-        self.modifier.compile()
+        self.modifier.to(dtype=self.dtype)
+        #self.modifier.compile()
         unet_mean = torch.tensor([0.485, 0.456, 0.406], device=device)
         unet_std = torch.tensor([0.229, 0.224, 0.225], device=device)
 
@@ -34,6 +36,7 @@ class SegmentCharacter:
         self.norm = torch.nn.Sequential(
             Normalize(inv_model_mean, inv_model_std, inplace=False), Normalize(unet_mean, unet_std)
         )
+        self.norm.to(dtype=self.dtype)
         self._warm_up = warm_up  # Better to be proportional to the number of class users.
         self.device = device
 
@@ -48,7 +51,7 @@ class SegmentCharacter:
             self.warm_up_update(-x.shape[0])
             return x
         input_device = x.device
-        x = x.to(self.device)
-        data_type = x.dtype
-        mask = (self.modifier(self.norm(x.detach().clone())) > 0).type(data_type)
-        return (mask * x).to(input_device)
+        input_data_type = x.dtype
+        x = x.to(self.device, dtype=self.dtype)
+        mask = self.modifier(self.norm(x.detach().clone())) > 0
+        return (mask * x).to(device=input_device, dtype=input_data_type)

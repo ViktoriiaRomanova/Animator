@@ -32,8 +32,6 @@ class GANTurboGenerator(nn.Module):
 
         self.unet = LoRaUNet2DConditionModel(params.unet_lora_rank)
         self.vae = SCAutoencoderKL(rank=params.vae_lora_rank, gamma=params.gamma)
-        self.vae.eval()
-        self.unet.eval()
 
     @torch.no_grad()
     def _random_fowrard(

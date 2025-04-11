@@ -9,6 +9,7 @@ PyYAML==6.0.2
 scikit_learn==1.6.1
 scipy==1.15.1
 torch==2.6.0
+torchrl==0.7.2
 torch-fidelity
 torchmetrics==1.6.1
 torchvision==0.21.0

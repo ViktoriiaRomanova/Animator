@@ -44,6 +44,8 @@ class UnpairedDataset(Dataset, _bp.BaseDataset):
         )
         self.img_dir_x = os.path.join(self.img_dir, "domainX")
         self.img_dir_y = os.path.join(self.img_dir, "domainY")
+        if not self.for_train:
+            self.crop = transforms.CenterCrop(size[0])
 
     def __len__(
         self,
@@ -66,9 +68,9 @@ class UnpairedDataset(Dataset, _bp.BaseDataset):
         image_y = io.read_image(img_y_path, mode=io.ImageReadMode.RGB)
         image_x = self.norm(self.to_resized_tensor(image_x).div(255))
         image_y = self.norm(self.to_resized_tensor(image_y).div(255))
-        if self.for_train:
-            image_x = self.crop(image_x)
-            image_y = self.crop(image_y)
+
+        image_x = self.crop(image_x)
+        image_y = self.crop(image_y)
 
         return (
             (image_x, image_y)

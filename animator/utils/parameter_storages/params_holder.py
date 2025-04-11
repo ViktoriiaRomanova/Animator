@@ -15,7 +15,7 @@ class BaseParamsHolder(ABC):
         parser = argparse.ArgumentParser()
         parser.add_argument("--dataset", required=True)  # path to dataset
         parser.add_argument("--prhome", required=False)  # path to project home directory READONLY
-        parser.add_argument("--omodel", required=True)  # output checkpoints of model weights
+        parser.add_argument("--omodel", required=False)  # output checkpoints of model weights
         parser.add_argument("--imodel")  # input model weights
         parser.add_argument("--params", required=True)  # path to training parameters
         parser.add_argument("--st", required=False)  # path to S3 storage to store intermediate results

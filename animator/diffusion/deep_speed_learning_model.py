@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import os
 import random
 from argparse import Namespace
@@ -6,11 +6,9 @@ from warnings import warn
 
 import deepspeed
 import torch
-import torch.distributed as dist
 from torch import nn
+from torchrl.data import ReplayBuffer, ListStorage
 from torchvision.transforms import Normalize
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from vision_aided_loss import Discriminator
 from tqdm.auto import tqdm
@@ -20,7 +18,6 @@ from .get_dataset import UnpairedDataset
 from .losses import CycleLoss, IdentityLoss
 from .segmentation import SegmentCharacter
 from .metric_storage import DiffusionMetricStorage
-from ..utils.buffer import ImageBuffer
 from ..utils.parameter_storages.diffusion_parameters import DiffusionTrainingParams
 
 
@@ -66,7 +63,7 @@ class DiffusionLearning:
         inv_model_std = 1 / cur_model_std
         inv_model_mean = -cur_model_mean * inv_model_std
 
-        self.renorm_for_fid = Normalize(inv_model_mean, inv_model_std, inplace=False)
+        self.renorm_for_fid = Normalize(inv_model_mean, inv_model_std, inplace=False).to(self.device)
 
         # Create forward(A) and reverse(B) models
         self.genA = GANTurboGenerator(params.main.caption_forward, params.generator)
@@ -94,7 +91,7 @@ class DiffusionLearning:
             self.modifier = None
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
 
-        self.genA, self.optim_genA, self.data_loader, _ = deepspeed.initialize(
+        self.genA, self.optim_genA, self.train_loader, _ = deepspeed.initialize(
             model=self.genA, training_data=train_set, config=self.init_args.ds_config
         )
         self.genB, self.optim_genB, _, _ = deepspeed.initialize(
@@ -106,18 +103,28 @@ class DiffusionLearning:
         self.discB, self.optim_discB, _, _ = deepspeed.initialize(
             model=self.discB, config=self.init_args.ds_config_disc
         )
-        # self.modelA = nn.ModuleList([self.genA, self.discA])
-        # self.modelB = nn.ModuleList([self.genB, self.discB])
 
-        # self.gens = nn.ModuleList([self.genA, self.genB])
-        # self.discs = nn.ModuleList([self.discA, self.discB])
+        self.batch_size = self.train_loader.batch_size
+
+        self.gens = nn.ModuleList([self.genA, self.genB])
+        self.discs = nn.ModuleList([self.discA, self.discB])
 
         # self.gens_trainable_params = get_trainable_params(self.gens, True)
 
-        # self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
+        self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
-        self.fake_Y_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
-        self.fake_X_buffer = ImageBuffer(self.world_size, params.main.buffer_size)
+        self.fake_Y_buffer = ReplayBuffer(
+            storage=ListStorage(params.main.buffer_size * self.batch_size),
+            batch_size=self.batch_size,
+            pin_memory=True,
+            prefetch=2,
+        )
+        self.fake_X_buffer = ReplayBuffer(
+            storage=ListStorage(params.main.buffer_size * self.batch_size),
+            batch_size=self.batch_size,
+            pin_memory=True,
+            prefetch=2,
+        )
 
         self.start_epoch = 0
         if init_args.imodel is not None:
@@ -137,7 +144,7 @@ class DiffusionLearning:
         self.lpips = LearnedPerceptualImagePatchSimilarity("vgg", "mean", sync_on_compute=False).to(
             self.device
         )
-        self.lpips.compile()
+        #self.lpips.compile()
 
         self.adv_alpha = params.loss.adversarial.adv_alpha
         self.cycle_loss = CycleLoss(
@@ -160,10 +167,14 @@ class DiffusionLearning:
         random.seed(self.rank + self.start_epoch)
 
     def save_model(self, epoch: int) -> None:
+        if (epoch + 1) % self.save_step != 0:
+            return
         state = {}
         state["epoch"] = epoch
-        state["bufferX"] = self.fake_X_buffer.state_dict()
-        state["bufferY"] = self.fake_Y_buffer.state_dict()
+        #self.fake_X_buffer.dumps(self.s3_storage)
+        #self.fake_Y_buffer.dumps(self.s3_storage)
+        state["X_storage"] = self.fake_X_buffer.state_dict()["_storage"]
+        state["Y_storage"] = self.fake_Y_buffer.state_dict()["_storage"]
         self.genA.save_checkpoint(
             self.s3_storage,
             tag="epoch_{}_{}".format(str(epoch), "genA"),
@@ -185,81 +196,49 @@ class DiffusionLearning:
             path, "epoch_{}_{}".format(version, "genA"), load_optimizer_states=True
         )
 
-        self.genB.load_checkpoint(
-            path, "epoch_{}_{}".format(version, "genB"), load_optimizer_states=True
-        )
+        self.genB.load_checkpoint(path, "epoch_{}_{}".format(version, "genB"), load_optimizer_states=True)
 
-        self.discA.load_checkpoint(
-            path, "epoch_{}_{}".format(version, "discA"), load_optimizer_states=True
-        )
+        self.discA.load_checkpoint(path, "epoch_{}_{}".format(version, "discA"), load_optimizer_states=True)
 
-        self.discB.load_checkpoint(
-            path, "epoch_{}_{}".format(version, "discB"), load_optimizer_states=True
-        )
+        self.discB.load_checkpoint(path, "epoch_{}_{}".format(version, "discB"), load_optimizer_states=True)
 
-        self.fake_X_buffer.load_state_dict(state["bufferX"])
-        self.fake_Y_buffer.load_state_dict(state["bufferY"])
+        #self.fake_X_buffer.loads(self.s3_storage)
+        #self.fake_Y_buffer.loads(self.s3_storage)
+
+        self.fake_X_buffer.load_state_dict({"_storage": state["X_storage"]})
+        self.fake_Y_buffer.load_state_dict({"_storage": state["Y_storage"]})
 
         return state["epoch"] + 1
 
-    def prepare_dataloader(
-        self, data: UnpairedDataset, rank: int, world_size: int, batch_size: int, seed: int
-    ) -> DataLoader:
-        """
-        Split dataset into N parts.
-
-        Returns: DataLoader instance for current part.
-        """
-        sampler = DistributedSampler(
-            data, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=True
-        )
-        data_loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=False,
-            drop_last=True,
-            sampler=sampler,
-            pin_memory=self.device[0].type != "cpu",
-            num_workers=16,
-            prefetch_factor=16,
-            multiprocessing_context="spawn",
-            persistent_workers=self.device[0].type != "cpu",
-            pin_memory_device=self.device[0].type if self.device[0].type != "cpu" else "",
-        )
-        return data_loader
-
     def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
-        with torch.autocast(
-            device_type=self.device[0].type, dtype=torch.float16, enabled=self.device[0].type == "cuda"
-        ):
-            self.discs.requires_grad_(False)
+        self.discs.requires_grad_(False)
 
-            fakeY_unmodif = self.genA(X)
-            fakeY = self.modifier(fakeY_unmodif)
-            cycle_fakeX = self.genB(fakeY_unmodif)
+        fakeY_unmodif = self.genA(X)
+        fakeY = self.modifier(fakeY_unmodif)
+        cycle_fakeX = self.genB(fakeY_unmodif)
 
-            fakeX_unmodif = self.genB(Y)
-            fakeX = self.modifier(fakeX_unmodif)
-            cycle_fakeY = self.genA(fakeX_unmodif)
+        fakeX_unmodif = self.genB(Y)
+        fakeX = self.modifier(fakeX_unmodif)
+        cycle_fakeY = self.genA(fakeX_unmodif)
 
-            self.fake_X_buffer.add(fakeX.detach().clone())
-            self.fake_Y_buffer.add(fakeY.detach().clone())
+        self.fake_X_buffer.extend(fakeX.detach().clone().to("cpu"))
+        self.fake_Y_buffer.extend(fakeY.detach().clone().to("cpu"))
 
-            adv_lossA = self.discA(fakeY, for_G=True).mean()
-            adv_lossB = self.discB(fakeX, for_G=True).mean().to(self.device[0])
+        adv_lossA = self.discA(fakeY, for_G=True).mean()
+        adv_lossB = self.discB(fakeX, for_G=True).mean()
 
-            cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
+        cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
 
-            idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+        idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
 
-            loss = adv_lossA + adv_lossB + cycle_loss + idn_loss
+        loss = adv_lossA + adv_lossB + cycle_loss + idn_loss
 
-            self.metrics.update("Total_loss", "gens", loss.detach().clone())
-            self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
-            self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
-            self.metrics.update("Cycle", "", cycle_loss.detach().clone())
-            self.metrics.update("Identity", "", idn_loss.detach().clone())
+        self.metrics.update("Total_loss", "gens", loss.detach().clone())
+        self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
+        self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
+        self.metrics.update("Cycle", "", cycle_loss.detach().clone())
+        self.metrics.update("Identity", "", idn_loss.detach().clone())
 
         return loss
 
@@ -267,58 +246,59 @@ class DiffusionLearning:
         self, X: torch.Tensor, Y: torch.Tensor, adv_alpha: float = 0.5
     ) -> tuple[torch.Tensor, torch.Tensor]:
 
-        with torch.autocast(
-            device_type=self.device[0].type, dtype=torch.float16, enabled=self.device[0].type == "cuda"
-        ):
-            self.discs.requires_grad_(True)
+        self.discs.requires_grad_(True)
 
-            lossA_false = self.discA(self.fake_Y_buffer.get(), for_real=False).mean() * adv_alpha
-            lossB_false = self.discB(self.fake_X_buffer.get(), for_real=False).mean() * adv_alpha
+        lossA_false = (
+            self.discA(self.fake_Y_buffer.sample().to(self.device), for_real=False).mean() * adv_alpha
+        )
+        lossB_false = (
+            self.discB(self.fake_X_buffer.sample().to(self.device), for_real=False).mean() * adv_alpha
+        )
 
-            lossA_true = self.discA(Y.to(device=self.device[0]), for_real=True).mean() * adv_alpha
-            lossB_true = self.discB(X.to(device=self.device[1]), for_real=True).mean() * adv_alpha
+        lossA_true = self.discA(Y, for_real=True).mean() * adv_alpha
+        lossB_true = self.discB(X, for_real=True).mean() * adv_alpha
 
-            lossA = lossA_true + lossA_false
-            lossB = lossB_true + lossB_false
+        lossA = lossA_true + lossA_false
+        lossB = lossB_true + lossB_false
 
-            self.metrics.update("Total_loss", "disc_A", lossA.detach().clone())
-            self.metrics.update("Total_loss", "disc_B", lossB.detach().clone())
-            self.metrics.update("Adv_discA", "True", lossA_true.detach().clone())
-            self.metrics.update("Adv_discA", "False", lossA_false.detach().clone())
-            self.metrics.update("Adv_discB", "True", lossB_true.detach().clone())
-            self.metrics.update("Adv_discB", "False", lossB_false.detach().clone())
+        self.metrics.update("Total_loss", "disc_A", lossA.detach().clone())
+        self.metrics.update("Total_loss", "disc_B", lossB.detach().clone())
+        self.metrics.update("Adv_discA", "True", lossA_true.detach().clone())
+        self.metrics.update("Adv_discA", "False", lossA_false.detach().clone())
+        self.metrics.update("Adv_discB", "True", lossB_true.detach().clone())
+        self.metrics.update("Adv_discB", "False", lossB_false.detach().clone())
 
         return lossA, lossB
 
     def backward_gen(self, loss: torch.Tensor) -> None:
         self.gens.zero_grad(True)
-        self.scaler.scale(loss).backward()
-        self.scaler.unscale_(self.optim_gen)
-        nn.utils.clip_grad_norm_(self.gens_trainable_params, 10)
-        self.scaler.step(self.optim_gen)
+        loss.backward()
+        self.genA._backward_epilogue()
+        self.genB._backward_epilogue()
+        self.genA.step()
+        self.genB.step()
+        self.genA.optimizer.zero_grad()
+        self.genB.optimizer.zero_grad()
 
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
         self.discs.zero_grad(True)
-        self.scaler.scale(lossA).backward()
-        self.scaler.scale(lossB).backward()
-        self.scaler.unscale_(self.optim_discA)
-        self.scaler.unscale_(self.optim_discB)
-        nn.utils.clip_grad_norm_(self.discs.parameters(), 10)
-        self.scaler.step(self.optim_discA)
-        self.scaler.step(self.optim_discB)
-
-        # Update scaler after last "step"
-        self.scaler.update()
+        self.discA.backward(lossA)
+        self.discB.backward(lossB)
+        self.discA.step()
+        self.discB.step()
 
     def execute(
         self,
     ) -> None:
         for epoch in range(self.start_epoch, self.epochs):
-            self.train_loader.sampler.set_epoch(epoch)
+            self.train_loader.data_sampler.set_epoch(epoch)
 
             self.models.train()
 
             for x_batch, y_batch in tqdm(self.train_loader):
+                x_batch = x_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
+
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
                 loss_disc_A, loss_disc_B = self.forward_disc(
@@ -326,65 +306,24 @@ class DiffusionLearning:
                 )
                 self.backward_disc(loss_disc_A, loss_disc_B)
 
-                self.fake_X_buffer.step()
-                self.fake_Y_buffer.step()
-
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
 
             # Calculate FID
             self.gens.eval()
             for x_batch, y_batch in tqdm(self.val_loader):
                 with torch.no_grad():
-                    x_batch = x_batch.to(self.device[0], non_blocking=True)
-                    y_batch = y_batch.to(self.device[1], non_blocking=True)
+                    x_batch = x_batch.to(self.device, non_blocking=True)
+                    y_batch = y_batch.to(self.device, non_blocking=True)
                     fakeY = self.genA(x_batch)
                     fakeX = self.genB(y_batch)
-                    self.renorm_for_fid.to(y_batch.device)
                     self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))
-                    self.renorm_for_fid.to(x_batch.device)
                     self.metrics.update("FID", "Backward", fakeX, self.renorm_for_fid(x_batch))
-            self.gens.train()
-
-            self.metrics.update(
-                "Lr", "gens", torch.tensor(self.scheduler_gen.get_last_lr()[0], device=self.device[0])
-            )
-            self.metrics.update(
-                "Lr", "disc_A", torch.tensor(self.scheduler_discA.get_last_lr()[0], device=self.device[0])
-            )
-            self.metrics.update(
-                "Lr", "disc_B", torch.tensor(self.scheduler_discB.get_last_lr()[0], device=self.device[0])
-            )
+            
             self.metrics.epoch = epoch
-
-            self.scheduler_gen.step()
-            self.scheduler_discA.step()
-            self.scheduler_discB.step()
 
             # Send metrics into stdout. This channel going to be transferred into initial machine.
             self.metrics.compute()
             self.metrics.reset()
 
-            if self.rank == 0:
-                if (epoch + 1) % self.save_step == 0:
-                    if self.s3_storage is not None:
-                        # Save model weights at S3 storage if the path to a bucket provided
-                        torch.save(self.save_model(epoch), os.path.join(self.s3_storage, str(epoch) + ".pt"))
-                    else:
-                        # Otherwise, save at a remote machine
-                        warn(
-                            " ".join(
-                                (
-                                    "Intermediate model weights are saved at the remote machine",
-                                    "and will be lost after the end of the training process",
-                                )
-                            )
-                        )
-                        torch.save(
-                            self.save_model(epoch), os.path.join(self.model_weights_dir, str(epoch) + ".pt")
-                        )
-        if self.rank == 0 and self.s3_storage is not None:
-            # Save final results at s3 storage
-            torch.save(
-                self.save_model(self.epochs - 1), os.path.join(self.s3_storage, str(self.epochs - 1) + ".pt")
-            )
-        dist.destroy_process_group()
+            # Save model checkpoint every "save_step"(hyperparameters -> main)
+            self.save_model(epoch)
