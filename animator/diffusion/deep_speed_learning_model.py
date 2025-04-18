@@ -144,7 +144,7 @@ class DiffusionLearning:
         self.lpips = LearnedPerceptualImagePatchSimilarity("vgg", "mean", sync_on_compute=False).to(
             self.device
         )
-        #self.lpips.compile()
+        # self.lpips.compile()
 
         self.adv_alpha = params.loss.adversarial.adv_alpha
         self.cycle_loss = CycleLoss(
@@ -171,10 +171,8 @@ class DiffusionLearning:
             return
         state = {}
         state["epoch"] = epoch
-        #self.fake_X_buffer.dumps(self.s3_storage)
-        #self.fake_Y_buffer.dumps(self.s3_storage)
-        state["X_storage"] = self.fake_X_buffer.state_dict()["_storage"]
-        state["Y_storage"] = self.fake_Y_buffer.state_dict()["_storage"]
+        state["X_storage"] = self.fake_X_buffer.state_dict()
+        state["Y_storage"] = self.fake_Y_buffer.state_dict()
         self.genA.save_checkpoint(
             self.s3_storage,
             tag="epoch_{}_{}".format(str(epoch), "genA"),
@@ -193,20 +191,23 @@ class DiffusionLearning:
 
     def load_model(self, path: str, version: int) -> int:
         _, state = self.genA.load_checkpoint(
-            path, "epoch_{}_{}".format(version, "genA"), load_optimizer_states=True
+            path, "epoch_{}_{}".format(version, "genA"), load_optimizer_states=True, load_module_strict=False
         )
 
-        self.genB.load_checkpoint(path, "epoch_{}_{}".format(version, "genB"), load_optimizer_states=True)
+        self.genB.load_checkpoint(
+            path, "epoch_{}_{}".format(version, "genB"), load_optimizer_states=True, load_module_strict=False
+        )
 
-        self.discA.load_checkpoint(path, "epoch_{}_{}".format(version, "discA"), load_optimizer_states=True)
+        self.discA.load_checkpoint(
+            path, "epoch_{}_{}".format(version, "discA"), load_optimizer_states=True, load_module_strict=False
+        )
 
-        self.discB.load_checkpoint(path, "epoch_{}_{}".format(version, "discB"), load_optimizer_states=True)
+        self.discB.load_checkpoint(
+            path, "epoch_{}_{}".format(version, "discB"), load_optimizer_states=True, load_module_strict=False
+        )
 
-        #self.fake_X_buffer.loads(self.s3_storage)
-        #self.fake_Y_buffer.loads(self.s3_storage)
-
-        self.fake_X_buffer.load_state_dict({"_storage": state["X_storage"]})
-        self.fake_Y_buffer.load_state_dict({"_storage": state["Y_storage"]})
+        self.fake_X_buffer.load_state_dict(state["X_storage"])
+        self.fake_Y_buffer.load_state_dict(state["Y_storage"])
 
         return state["epoch"] + 1
 
@@ -237,8 +238,8 @@ class DiffusionLearning:
         self.metrics.update("Total_loss", "gens", loss.detach().clone())
         self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
         self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
-        self.metrics.update("Cycle", "", cycle_loss.detach().clone())
-        self.metrics.update("Identity", "", idn_loss.detach().clone())
+        self.metrics.update("Cycle", "loss", cycle_loss.detach().clone())
+        self.metrics.update("Identity", "loss", idn_loss.detach().clone())
 
         return loss
 
@@ -318,7 +319,7 @@ class DiffusionLearning:
                     fakeX = self.genB(y_batch)
                     self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))
                     self.metrics.update("FID", "Backward", fakeX, self.renorm_for_fid(x_batch))
-            
+
             self.metrics.epoch = epoch
 
             # Send metrics into stdout. This channel going to be transferred into initial machine.
