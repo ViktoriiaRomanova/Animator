@@ -23,20 +23,20 @@ cd $(dirname "$0")
 
 TRANSFORM=diffusion/
 OUTPUT_MODEL=train_checkpoints/
-IMODEL=/train_checkpoints/2025_04_11_16_41_33/restart_from_epoch:1
+IMODEL=train_checkpoints/2025_04_18_10_21_01/restart_from_epoch:1
 PARAMS=hyperparameters.yaml
 
 CUR_HOST=name@PI
 MY_REMOTE_DIR=/home/name/animator/
 
-#docker context update --docker host=ssh://$CUR_HOST compute-vm
+docker context update --docker host=ssh://$CUR_HOST compute-vm
 
 # Automatic move of the necessary data
 #scp train.py $CUR_HOST:$MY_REMOTE_DIR # train
-#scp ds_config.json $CUR_HOST:$MY_REMOTE_DIR
-#scp ds_config_disc.json $CUR_HOST:$MY_REMOTE_DIR # train
-#scp -r ../../../../animator $CUR_HOST:$MY_REMOTE_DIR # animator package
-#scp hyperparameters.yaml $CUR_HOST:$MY_REMOTE_DIR # hyperparameters
+scp ds_config.json $CUR_HOST:$MY_REMOTE_DIR
+scp ds_config_disc.json $CUR_HOST:$MY_REMOTE_DIR # train
+scp -r ../../../../animator $CUR_HOST:$MY_REMOTE_DIR # animator package
+scp hyperparameters.yaml $CUR_HOST:$MY_REMOTE_DIR # hyperparameters
 #scp -r ../../../../datasets/diffusion/ $CUR_HOST:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp /train_checkpoints/129.pt $CUR_HOST:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
 
@@ -50,9 +50,9 @@ docker --context compute-vm run --name animator \
 deepspeed train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
---imodel ${IMODEL} \
 --params ${PARAMS} \
---st ${OUTPUT_MODEL}
+--st ${OUTPUT_MODEL} \
+#--imodel ${IMODEL} 
 
 # Get the name of the last obtained weights
 #WNAME=$(ssh remote-machine "find viktoriia/Animator/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')

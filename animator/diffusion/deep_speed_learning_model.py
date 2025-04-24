@@ -1,10 +1,10 @@
-from datetime import datetime
 import os
 import random
 from argparse import Namespace
 from warnings import warn
 
 import deepspeed
+import deepspeed.comm
 import torch
 from torch import nn
 from torchrl.data import ReplayBuffer, ListStorage
@@ -40,10 +40,8 @@ class DiffusionLearning:
 
         # Create a folder to store intermediate results at s3 storage (Yandex Object Storage)
         assert init_args.st is not None, "In this pipline s3 is the only way to save model state"
-        if self.rank == 0:
-            self.s3_storage = os.path.join(init_args.st, datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
-            if not os.path.exists(self.s3_storage):
-                os.makedirs(self.s3_storage)
+        self.s3_storage = init_args.st
+        os.makedirs(self.s3_storage, exist_ok=True)
 
         train_set = UnpairedDataset(
             init_args.dataset, train_data, size=params.data.size, mean=params.data.mean, std=params.data.std
@@ -297,6 +295,8 @@ class DiffusionLearning:
             self.models.train()
 
             for x_batch, y_batch in tqdm(self.train_loader):
+                torch.distributed.barrier(device_ids=[self.rank])
+
                 x_batch = x_batch.to(self.device)
                 y_batch = y_batch.to(self.device)
 
@@ -328,3 +328,8 @@ class DiffusionLearning:
 
             # Save model checkpoint every "save_step"(hyperparameters -> main)
             self.save_model(epoch)
+        self.genA.destroy()
+        self.genB.destroy()
+        self.discA.destroy()
+        self.discB.destroy()
+        deepspeed.comm.destroy_process_group()
