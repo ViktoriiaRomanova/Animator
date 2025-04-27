@@ -11,7 +11,7 @@ main:
 
 data:
   data_part: 0.9 # Proportions to split data for train and evaluation
-  sub_part_data: 0.01 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
+  sub_part_data: 0.9 # Part of picked data to use for training (useful for project tests, for real training process set == 1)
   size: [512, 512]
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
