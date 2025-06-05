@@ -2,9 +2,10 @@ name: diffusion_based_model
 desc: Script for training the cycleGAN-Turbo model (Distributed Data Parallel)
 cmd: >
   deepspeed train.py
-  --st ${RES_STORAGE}/2025_04_25_20_00
+  --st ${RES_STORAGE}/2025_05_26_17_00
   --dataset ${DIFFUSION}/
   --params ${PARAMS}
+  --imodel ${RES_STORAGE}/2025_05_26_17_00/restart_from_epoch:8
 env:
   docker:
     image: cr.yandex/crp9dqvp603lodovpio2/cuda12.8.0:new

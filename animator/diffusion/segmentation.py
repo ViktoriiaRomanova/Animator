@@ -16,7 +16,7 @@ class SegmentCharacter:
         std: tuple[float],
         warm_up: int,
     ) -> None:
-        self.dtype = torch.float16
+        self.dtype = torch.float32 if device == "cpu" else torch.float16
         self.modifier = UNet(model_type).to(device)
         state = torch.load(path, map_location=device, weights_only=True)["model"]
         self.modifier.load_state_dict(state)

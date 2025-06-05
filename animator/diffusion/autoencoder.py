@@ -101,8 +101,8 @@ class SCAutoencoderKL(nn.Module):
         lora_config = LoraConfig(
             r=rank,
             init_lora_weights="gaussian",
-            target_modules=encoder_param_names,
-            modules_to_save=module_names_to_keep,
+            target_modules=encoder_param_names + module_names_to_keep
+            #modules_to_save=module_names_to_keep,
         )
         self.vae = get_peft_model(self.vae, lora_config)
 

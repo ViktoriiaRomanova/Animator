@@ -83,7 +83,7 @@ class DiffusionLearning:
                 device=self.device,
                 mean=params.data.mean,
                 std=params.data.std,
-                warm_up=params.main.warm_up,
+                warm_up=4 * params.main.warm_up, # at each step, the segmentation is applied 4 times.
             )
         else:
             self.modifier = None
@@ -135,7 +135,7 @@ class DiffusionLearning:
             )  # Path to the model should be set in the format path/reastart_from_epoch:some_number
             version = int(version)
             self.start_epoch = self.load_model(path_to_model, version)
-            self.modifier.warm_up_update(-self.start_epoch * self.batch_size)
+            self.modifier.warm_up_update(-self.start_epoch * len(self.train_loader) * self.batch_size * 4)
 
         self.epochs += self.start_epoch
 
@@ -221,11 +221,11 @@ class DiffusionLearning:
         fakeX = self.modifier(fakeX_unmodif)
         cycle_fakeY = self.genA(fakeX_unmodif)
 
-        self.fake_X_buffer.extend(fakeX.detach().clone().to("cpu"))
-        self.fake_Y_buffer.extend(fakeY.detach().clone().to("cpu"))
+        self.fake_X_buffer.extend(fakeX.detach().clone().to(device="cpu",dtype=torch.float32))
+        self.fake_Y_buffer.extend(fakeY.detach().clone().to(device="cpu",dtype=torch.float32))
 
-        adv_lossA = self.discA(fakeY, for_G=True).mean()
-        adv_lossB = self.discB(fakeX, for_G=True).mean()
+        adv_lossA = self.discA(fakeY.float(), for_G=True).mean()
+        adv_lossB = self.discB(fakeX.float(), for_G=True).mean()
 
         cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
 
@@ -254,8 +254,8 @@ class DiffusionLearning:
             self.discB(self.fake_X_buffer.sample().to(self.device), for_real=False).mean() * adv_alpha
         )
 
-        lossA_true = self.discA(Y, for_real=True).mean() * adv_alpha
-        lossB_true = self.discB(X, for_real=True).mean() * adv_alpha
+        lossA_true = self.discA(Y.float(), for_real=True).mean() * adv_alpha
+        lossB_true = self.discB(X.float(), for_real=True).mean() * adv_alpha
 
         lossA = lossA_true + lossA_false
         lossB = lossB_true + lossB_false
@@ -270,7 +270,7 @@ class DiffusionLearning:
         return lossA, lossB
 
     def backward_gen(self, loss: torch.Tensor) -> None:
-        self.gens.zero_grad(True)
+        #self.gens.zero_grad(True)
         loss.backward()
         self.genA._backward_epilogue()
         self.genB._backward_epilogue()
@@ -297,9 +297,8 @@ class DiffusionLearning:
             for x_batch, y_batch in tqdm(self.train_loader):
                 torch.distributed.barrier(device_ids=[self.rank])
 
-                x_batch = x_batch.to(self.device)
-                y_batch = y_batch.to(self.device)
-
+                x_batch = x_batch.to(self.device, dtype=torch.float16)
+                y_batch = y_batch.to(self.device, dtype=torch.float16)
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
                 loss_disc_A, loss_disc_B = self.forward_disc(
@@ -313,8 +312,8 @@ class DiffusionLearning:
             self.gens.eval()
             for x_batch, y_batch in tqdm(self.val_loader):
                 with torch.no_grad():
-                    x_batch = x_batch.to(self.device, non_blocking=True)
-                    y_batch = y_batch.to(self.device, non_blocking=True)
+                    x_batch = x_batch.to(self.device, non_blocking=True, dtype=torch.float16)
+                    y_batch = y_batch.to(self.device, non_blocking=True, dtype=torch.float16)
                     fakeY = self.genA(x_batch)
                     fakeX = self.genB(y_batch)
                     self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))
