@@ -1,13 +1,13 @@
 main:
   random_state: 10
-  epochs: 1
+  epochs: 5
   buffer_size: 50 # Size of the buffer to store generated images
   caption_forward: "person to anime character"
   caption_reverse: "anime character to person"
   segmentation_model: "/workspace/trained_models/segmentation/99.pt"
   segmentation_model_type: "B" # A, B OR C (details in figure_extraction unet model description)
   save_step: 1 # Once in save_step epoch save model weights
-  warm_up: 500000 # number of steps without application of the segmentation 
+  warm_up: 5000000 # number of steps without application of the segmentation 
 
 data:
   data_part: 0.9 # Proportions to split data for train and evaluation

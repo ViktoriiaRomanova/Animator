@@ -1,5 +1,6 @@
 from warnings import warn
 
+import deepspeed
 from diffusers import AutoencoderKL
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
 from peft import get_peft_model, LoraConfig
@@ -42,6 +43,15 @@ def decoder_forward(
     x = self.conv_act(x)
     x = self.conv_out(x)
     return x
+
+
+class CheckpointedSubModule(nn.Module):
+    def __init__(self, sub_module: nn.Module) -> None:
+        super().__init__()
+        self.sub_module = sub_module
+
+    def forward(self, x: Tensor) -> Tensor:
+        return deepspeed.checkpointing.checkpoint(self.sub_module, x)
 
 
 class SCAutoencoderKL(nn.Module):
@@ -105,6 +115,22 @@ class SCAutoencoderKL(nn.Module):
             #modules_to_save=module_names_to_keep,
         )
         self.vae = get_peft_model(self.vae, lora_config)
+        """
+        target_modules = encoder_param_names + module_names_to_keep
+
+        for name, module in self.vae.named_modules():
+            for target_name in target_modules:
+                if target_name in {"conv_in", "to_out.0", "conv_out"}: continue
+                if name.endswith("." + target_name):
+                    sub_module = CheckpointedSubModule(module)
+                    self.vae.set_submodule(name, sub_module)
+                    #sub_moduleA = CheckpointedSubModule(module.get_submodule("lora_A.default"))
+                    #module.set_submodule("lora_A.default", sub_moduleA)
+                    #print(name, module)
+
+                    #sub_moduleB = CheckpointedSubModule(module.get_submodule("lora_B.default"))
+                    #module.set_submodule("lora_B.default", sub_moduleB)
+        """
 
     def decode(self, x: Tensor, incoming_skip: list[Tensor], *args, **kwargs) -> Tensor:
         """Decode rescale and sample images."""
