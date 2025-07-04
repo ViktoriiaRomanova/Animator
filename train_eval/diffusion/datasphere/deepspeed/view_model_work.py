@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import yaml
+import os
 from torch import tensor
 from torch.utils.data import DataLoader
 from torchvision.transforms import CenterCrop
@@ -10,9 +11,11 @@ from animator.post_processing.prepare_data import PostProcessingDataset
 from animator.utils.img_processing import ImgProcessing, ModelImgProcessing
 from animator.utils.parameter_storages.ds_diffusion_parameters import DSDiffusionTrainingParams
 
-HYPERPARAMETERS = "hyperparameters.yaml"
-MODEL1_WEIGHTS = "train_checkpoints/2025_04_25_20_00/pytorch_model.bin"
-IMG_PATH = "../../../../datasets/diffusion/domainX"
+HYPERPARAMETERS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/deepspeed/hyperparameters.yaml"
+MODEL1_WEIGHTS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/deepspeed/train_checkpoints/9/pytorch_model.bin"
+MODEL2_WEIGHTS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/train_checkpoints/before/pytorch_model.bin"
+#IMG_PATH = "../../../../datasets/diffusion/domainX"
+IMG_PATH = "/home/viktoriia/Pictures/tmp"
 
 
 if __name__ == "__main__":
@@ -20,10 +23,11 @@ if __name__ == "__main__":
         params = DSDiffusionTrainingParams(**yaml.safe_load(file))
 
     data_transform = params.data
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     batch_size = 1  # keep batch_size == 1 for different size images
     # dataloader can't combine images of different size
-    names = get_data(IMG_PATH)[22:23]
+    names = get_data(IMG_PATH)[1:2]
     imges = PostProcessingDataset(
         IMG_PATH,
         names,
@@ -44,10 +48,12 @@ if __name__ == "__main__":
     model_based_img_processor1 = ModelImgProcessing(
         GANTurboGenerator(params.main.caption_forward, params.generator),
         MODEL1_WEIGHTS,
+        MODEL2_WEIGHTS,
         strict=False,
         mode="simple",
         transform=img_transformation,
     )
+    
     img_processor = ImgProcessing(img_transformation)
 
     for loaded_img in dataloader:

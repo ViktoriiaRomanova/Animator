@@ -5,7 +5,7 @@ cmd: >
   --st ${RES_STORAGE}/2025_05_26_17_00
   --dataset ${DIFFUSION}/
   --params ${PARAMS}
-  --imodel ${RES_STORAGE}/2025_05_26_17_00/restart_from_epoch:8
+  --imodel ${RES_STORAGE}/2025_05_26_17_00/restart_from_epoch:9
 env:
   docker:
     image: cr.yandex/crp9dqvp603lodovpio2/cuda12.8.0:new
