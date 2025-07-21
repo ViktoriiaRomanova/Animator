@@ -4,17 +4,42 @@ import deepspeed
 from diffusers import AutoencoderKL
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
 from peft import get_peft_model, LoraConfig
-from torch import Generator, nn, Tensor
+from torch import Generator, nn, Tensor, utils, cuda
 
+
+def check_memory(block, x, name, idx):
+    cuda.reset_peak_memory_stats()
+    mem_before = cuda.memory_allocated()
+    print("input shape:", x.shape)
+    x = utils.checkpoint.checkpoint(block, x, use_reentrant=False)
+    peak = cuda.max_memory_allocated()
+    mem_after = cuda.memory_allocated()
+    print(f"[{name}{idx}] Forward mem delta: {(mem_after - mem_before)/1e6:.1f} MB, peak: {peak/1e6:.1f} MB")
+    return x
+
+
+def check_memory2(block, x, latent_embeds, name, idx):
+    cuda.reset_peak_memory_stats()
+    mem_before = cuda.memory_allocated()
+    print("input shape:", x.shape)
+    x = utils.checkpoint.checkpoint(block, x, latent_embeds, use_reentrant=False)
+    peak = cuda.max_memory_allocated()
+    mem_after = cuda.memory_allocated()
+    print(f"[{name}{idx}] Forward mem delta: {(mem_after - mem_before)/1e6:.1f} MB, peak: {peak/1e6:.1f} MB")
+    return x
 
 def encoder_forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
     """Forward method for encoder(AutoencoderKL) with skip connections functionality."""
     down_skip = []
     x = self.conv_in(x)
-    for down_block in self.down_blocks:
+    for ind, down_block in enumerate(self.down_blocks):
         down_skip.append(x)
-        x = down_block(x)
-    x = self.mid_block(x)
+        #x = utils.checkpoint.checkpoint(down_block, x, use_reentrant=False)
+        x = check_memory(down_block, x, "down_block", str(ind))
+        #x = down_block(x)
+    #x = utils.checkpoint.checkpoint(self.mid_block, x, use_reentrant=False)
+    x = check_memory(self.mid_block, x, "mid_block_encoder", "")
+    #x = self.mid_block(x)
     x = self.conv_norm_out(x)
     x = self.conv_act(x)
     x = self.conv_out(x)
@@ -26,16 +51,20 @@ def decoder_forward(
 ) -> Tensor:
     """Forward method for decoder(AutoencoderKL) with skip connections functionality."""
     x = self.conv_in(x)
-    x = self.mid_block(x)
+    #x = utils.checkpoint.checkpoint(self.mid_block, x, use_reentrant=False)
+    x = check_memory(self.mid_block, x, "mid_block_decoder", "")
+    #x = self.mid_block(x)
     len_skip = len(incoming_skip) - 1
     if len_skip == -1:
         warn("Missing skip connection data")
         for up_block in self.up_blocks:
-            x = up_block(x, latent_embeds)
+            x = utils.checkpoint.checkpoint(up_block, x, latent_embeds, use_reentrant=False)
     else:
         for ind, up_block in enumerate(self.up_blocks):
             up_skip = self.skip[ind](incoming_skip[len_skip - ind] * self.gamma)
-            x = up_block(x + up_skip, latent_embeds)
+            #x = utils.checkpoint.checkpoint(up_block, x + up_skip, latent_embeds, use_reentrant=False)
+            x = check_memory2(up_block, x + up_skip, latent_embeds, "up_block", str(ind))
+            #x = up_block(x + up_skip, latent_embeds)
     if latent_embeds is None:
         x = self.conv_norm_out(x)
     else:
@@ -52,6 +81,16 @@ class CheckpointedSubModule(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return deepspeed.checkpointing.checkpoint(self.sub_module, x)
+    
+    def __getattr__(self, name):
+        """Forward missing attributes to the wrapped module."""
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.sub_module, name)
+
+    def __getitem__(self, adapter: str) -> nn.Module:
+        return self.sub_module[adapter]
 
 
 class SCAutoencoderKL(nn.Module):
@@ -115,10 +154,10 @@ class SCAutoencoderKL(nn.Module):
             #modules_to_save=module_names_to_keep,
         )
         self.vae = get_peft_model(self.vae, lora_config)
-        """
+
         target_modules = encoder_param_names + module_names_to_keep
 
-        for name, module in self.vae.named_modules():
+        """for name, module in self.vae.named_modules():
             for target_name in target_modules:
                 if target_name in {"conv_in", "to_out.0", "conv_out"}: continue
                 if name.endswith("." + target_name):
@@ -130,7 +169,7 @@ class SCAutoencoderKL(nn.Module):
 
                     #sub_moduleB = CheckpointedSubModule(module.get_submodule("lora_B.default"))
                     #module.set_submodule("lora_B.default", sub_moduleB)
-        """
+        print(self.vae)"""
 
     def decode(self, x: Tensor, incoming_skip: list[Tensor], *args, **kwargs) -> Tensor:
         """Decode rescale and sample images."""
@@ -165,3 +204,22 @@ class SCAutoencoderKL(nn.Module):
         x, down_skip = self.encode(x, sample_posterior, generator)
         x = self.decode(x, down_skip)
         return x
+
+
+"""
+ target_modules = encoder_param_names + module_names_to_keep
+
+        for name, module in self.vae.named_modules():
+            for target_name in target_modules:
+                if target_name in {"conv_in", "to_out.0", "conv_out"}: continue
+                if name.endswith("." + target_name):
+                    sub_module = CheckpointedSubModule(module)
+                    self.vae.set_submodule(name, sub_module)
+                    sub_moduleA = CheckpointedSubModule(module.get_submodule("lora_A.default"))
+                    module.set_submodule("lora_A.default", sub_moduleA)
+                    #print(name, module)
+
+                    sub_moduleB = CheckpointedSubModule(module.get_submodule("lora_B.default"))
+                    module.set_submodule("lora_B.default", sub_moduleB)
+
+"""
