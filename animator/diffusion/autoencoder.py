@@ -4,7 +4,7 @@ import deepspeed
 from diffusers import AutoencoderKL
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
 from peft import get_peft_model, LoraConfig
-from torch import Generator, nn, Tensor, utils, cuda
+from torch import Generator, nn, Tensor, utils, cuda, amp
 
 
 def check_memory(block, x, name, idx):
@@ -28,17 +28,36 @@ def check_memory2(block, x, latent_embeds, name, idx):
     print(f"[{name}{idx}] Forward mem delta: {(mem_after - mem_before)/1e6:.1f} MB, peak: {peak/1e6:.1f} MB")
     return x
 
+def checkpoint_forward(module, *args):
+
+    #def forward(*inputs):
+        #return module(*inputs)
+        
+    #return utils.checkpoint.checkpoint(forward, *args, use_reentrant=False)
+    return deepspeed.checkpointing.checkpoint(module, *args)
+
 def encoder_forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
     """Forward method for encoder(AutoencoderKL) with skip connections functionality."""
     down_skip = []
     x = self.conv_in(x)
+    tot_size = 0
     for ind, down_block in enumerate(self.down_blocks):
         down_skip.append(x)
+        print([sk.shape for sk in down_skip])
+        size = x.nelement() * x.element_size() / 1024/ 1024
+        tot_size += size
+        print("Size Mb:", size)
         #x = utils.checkpoint.checkpoint(down_block, x, use_reentrant=False)
-        x = check_memory(down_block, x, "down_block", str(ind))
+        x = checkpoint_forward(down_block, x)
+        #x = check_memory(down_block, x, "down_block", str(ind))
         #x = down_block(x)
     #x = utils.checkpoint.checkpoint(self.mid_block, x, use_reentrant=False)
-    x = check_memory(self.mid_block, x, "mid_block_encoder", "")
+    #x = check_memory(self.mid_block, x, "mid_block_encoder", "")
+    size = x.nelement() * x.element_size() / 1024/ 1024
+    print("Size Mb:", size)
+    tot_size += size
+    x = checkpoint_forward(self.mid_block, x)
+    print("Tot_size encoder: ", tot_size)
     #x = self.mid_block(x)
     x = self.conv_norm_out(x)
     x = self.conv_act(x)
@@ -51,8 +70,13 @@ def decoder_forward(
 ) -> Tensor:
     """Forward method for decoder(AutoencoderKL) with skip connections functionality."""
     x = self.conv_in(x)
+    tot_size = 0
+    size = x.nelement() * x.element_size() / 1024/ 1024
+    print("Size Mb:", size)
+    tot_size += size
     #x = utils.checkpoint.checkpoint(self.mid_block, x, use_reentrant=False)
-    x = check_memory(self.mid_block, x, "mid_block_decoder", "")
+    x = checkpoint_forward(self.mid_block, x)
+    #x = check_memory(self.mid_block, x, "mid_block_decoder", "")
     #x = self.mid_block(x)
     len_skip = len(incoming_skip) - 1
     if len_skip == -1:
@@ -63,8 +87,13 @@ def decoder_forward(
         for ind, up_block in enumerate(self.up_blocks):
             up_skip = self.skip[ind](incoming_skip[len_skip - ind] * self.gamma)
             #x = utils.checkpoint.checkpoint(up_block, x + up_skip, latent_embeds, use_reentrant=False)
-            x = check_memory2(up_block, x + up_skip, latent_embeds, "up_block", str(ind))
+            size = x.nelement() * x.element_size() / 1024/ 1024
+            print("Size Mb:", size)
+            tot_size += size
+            x = checkpoint_forward(up_block, x + up_skip, latent_embeds)
+            #x = check_memory2(up_block, x + up_skip, latent_embeds, "up_block", str(ind))
             #x = up_block(x + up_skip, latent_embeds)
+        print("Tot_size decoder: ", tot_size)
     if latent_embeds is None:
         x = self.conv_norm_out(x)
     else:
@@ -150,7 +179,7 @@ class SCAutoencoderKL(nn.Module):
         lora_config = LoraConfig(
             r=rank,
             init_lora_weights="gaussian",
-            target_modules=encoder_param_names + module_names_to_keep
+            target_modules=encoder_param_names + module_names_to_keep,
             #modules_to_save=module_names_to_keep,
         )
         self.vae = get_peft_model(self.vae, lora_config)
