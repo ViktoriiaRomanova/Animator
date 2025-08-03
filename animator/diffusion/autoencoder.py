@@ -4,7 +4,7 @@ import deepspeed
 from diffusers import AutoencoderKL
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
 from peft import get_peft_model, LoraConfig
-from torch import Generator, nn, Tensor, utils
+from torch import Generator, nn, Tensor, utils, cuda
 
 
 def checkpoint_forward(module, *args, is_ds_checkpointing: bool=False):
@@ -15,12 +15,17 @@ def checkpoint_forward(module, *args, is_ds_checkpointing: bool=False):
         return deepspeed.checkpointing.checkpoint(module, *args)
 
     else:
-        return utils.checkpoint.checkpoint(module, *args, use_reentrant=False)
+        #cuda.reset_peak_memory_stats()
+        x = utils.checkpoint.checkpoint(module, *args, use_reentrant=False)
+        #peak = cuda.max_memory_allocated()
+        #print(f"[Forward mem delta: MB, peak: {peak/1e6:.1f} MB")
+        return  x #module(*args)
 
 def encoder_forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
     """Forward method for encoder(AutoencoderKL) with skip connections functionality."""
     down_skip = []
     x = self.conv_in(x)
+    #x.register_hook(lambda grad: print(grad))
     for ind, down_block in enumerate(self.down_blocks):
         down_skip.append(x)
         x = checkpoint_forward(down_block, x)

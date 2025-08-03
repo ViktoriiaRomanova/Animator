@@ -86,7 +86,10 @@ class DiffusionLearning:
                 warm_up=4 * params.main.warm_up, # at each step, the segmentation is applied 4 times.
             )
         else:
-            self.modifier = None
+            # TMP!!!!
+            def dummy(x):
+                return x
+            self.modifier = dummy
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
 
         self.genA, self.optim_genA, self.train_loader, _ = deepspeed.initialize(
@@ -270,7 +273,6 @@ class DiffusionLearning:
         return lossA, lossB
 
     def backward_gen(self, loss: torch.Tensor) -> None:
-        #self.gens.zero_grad(True)
         loss.backward()
         self.genA._backward_epilogue()
         self.genB._backward_epilogue()
@@ -280,15 +282,27 @@ class DiffusionLearning:
         self.genB.optimizer.zero_grad()
 
     def backward_disc(self, lossA: torch.Tensor, lossB: torch.Tensor) -> None:
-        self.discs.zero_grad(True)
         self.discA.backward(lossA)
         self.discB.backward(lossB)
         self.discA.step()
         self.discB.step()
+        self.discA.optimizer.zero_grad()
+        self.discB.optimizer.zero_grad()
 
     def execute(
         self,
     ) -> None:
+        for name, model in [("genA", self.genA), ("genB", self.genB), ("discA", self.discA), ("discB", self.discB)]:
+            model._had_backward = 0
+            def make_hook(name, model):
+                def hook(grad):
+                    model._had_backward += 1
+                return hook
+            for p in model.parameters():
+                if p.requires_grad:
+                    p.register_hook(make_hook(name, model))
+
+
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loader.data_sampler.set_epoch(epoch)
 
@@ -297,8 +311,8 @@ class DiffusionLearning:
             for x_batch, y_batch in tqdm(self.train_loader):
                 torch.distributed.barrier(device_ids=[self.rank])
 
-                x_batch = x_batch.to(self.device, dtype=torch.float16)
-                y_batch = y_batch.to(self.device, dtype=torch.float16)
+                x_batch = x_batch.to(self.device)
+                y_batch = y_batch.to(self.device)#, dtype=torch.float16)
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
                 loss_disc_A, loss_disc_B = self.forward_disc(
@@ -306,14 +320,17 @@ class DiffusionLearning:
                 )
                 self.backward_disc(loss_disc_A, loss_disc_B)
 
+                print("GEN BACKWARD STATUS:", self.genA._had_backward, self.genB._had_backward)
+                print("DISC BACKWARD STATUS:", self.discA._had_backward, self.discB._had_backward)
+
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
 
             # Calculate FID
             self.gens.eval()
             for x_batch, y_batch in tqdm(self.val_loader):
                 with torch.no_grad():
-                    x_batch = x_batch.to(self.device, non_blocking=True, dtype=torch.float16)
-                    y_batch = y_batch.to(self.device, non_blocking=True, dtype=torch.float16)
+                    x_batch = x_batch.to(self.device, non_blocking=True)#, dtype=torch.float16)
+                    y_batch = y_batch.to(self.device, non_blocking=True) #, dtype=torch.float16)
                     fakeY = self.genA(x_batch)
                     fakeX = self.genB(y_batch)
                     self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))

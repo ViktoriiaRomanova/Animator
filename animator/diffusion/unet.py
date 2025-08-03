@@ -12,7 +12,7 @@ class CheckpointedSubModule(nn.Module):
 
     def forward(self, *args, **kwargs) -> Tensor:
         #return self.check_memory(self.sub_module, *args, **kwargs)
-        return utils.checkpoint.checkpoint(self.sub_module, *args, **kwargs, use_reentrant=False)
+        return utils.checkpoint.checkpoint(self.sub_module, *args, use_reentrant=False, **kwargs)
 
     def __getattr__(self, name):
         """Forward missing attributes to the wrapped module."""
@@ -66,17 +66,17 @@ class LoRaUNet2DConditionModel(nn.Module):
         )
         self.unet = get_peft_model(self.unet, lora_config)
         
-        # module = self.unet.get_submodule("base_model.model.mid_block")
+        #module = self.unet.get_submodule("base_model.model.mid_block")
         # sub_module = CheckpointedSubModule(module, "mid_block")
         # self.unet.set_submodule("base_model.model.mid_block", sub_module)
 
-        # for ind, module in enumerate(self.unet.get_submodule("base_model.model.down_blocks")):
-        #     sub_module = CheckpointedSubModule(module, f"down_block{ind}")
-        #     self.unet.set_submodule("base_model.model.down_blocks.{}".format(ind), sub_module)
-
-        # for ind, module in enumerate(self.unet.get_submodule("base_model.model.up_blocks")):
-        #     sub_module = CheckpointedSubModule(module, f"up_block{ind}")
-        #     self.unet.set_submodule("base_model.model.up_blocks.{}".format(ind), sub_module)
-
+        #for ind, module in enumerate(self.unet.get_submodule("base_model.model.down_blocks")):
+        #    sub_module = CheckpointedSubModule(module, f"down_block{ind}")
+        #    self.unet.set_submodule("base_model.model.down_blocks.{}".format(ind), sub_module)
+        #    if ind == 2: break
+        #for ind, module in enumerate(self.unet.get_submodule("base_model.model.up_blocks")):
+        #    sub_module = CheckpointedSubModule(module, f"up_block{ind}")
+        #    self.unet.set_submodule("base_model.model.up_blocks.{}".format(ind), sub_module)
+        #    if ind == 2: break
     def forward(self, *args, **kwargs):
         return self.unet(*args, **kwargs)

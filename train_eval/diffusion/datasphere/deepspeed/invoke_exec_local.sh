@@ -24,13 +24,13 @@ set -e
 cd $(dirname "$0")
 
 TRANSFORM=datasets/diffusion/
-OUTPUT_MODEL=diffusion/train_checkpoints/2025_06_05_19_00/
+OUTPUT_MODEL=diffusion/train_checkpoints/2025_07_31_18_00/
 #IMODEL=diffusion/train_checkpoints/2025_02_12_16_04_07/1.pt
 PARAMS=diffusion/hyperparameters.yaml
 
 # Automatic move of the necessary data
 #scp train.py remote-machine:$MY_REMOTE_DIR/diffusion # train
-#scp -r ../../../../animator remote-machine:$MY_REMOTE_DIR # animator package
+scp -r ../../../../animator remote-machine:$MY_REMOTE_DIR # animator package
 scp hyperparameters.yaml remote-machine:$MY_REMOTE_DIR/diffusion # hyperparameters
 scp ds_config.json remote-machine:$MY_REMOTE_DIR
 scp ds_config_disc.json remote-machine:$MY_REMOTE_DIR # train
@@ -44,7 +44,7 @@ scp ds_config_disc.json remote-machine:$MY_REMOTE_DIR # train
 
 # REMINDER2 to make deepspeed activation checkpointing work call:
 # deepspeed.checkpointing.configure(mpu_=None, deepspeed_config=ds_config) MANDATORY
-# setting ds_config with nesessary configurations into:
+# setting ds_confi_dummy_discg with nesessary configurations into:
 # deepspeed.initialize(model=model1, config=ds_config) 
 # does NOTHING with activations checkpointing configurations
 
