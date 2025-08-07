@@ -28,7 +28,7 @@ inputs:
   - hyperparameters.yaml: PARAMS
 
 cloud-instance-type:
-  - g1.1
+  - gt4.1
 working-storage:
   type: SSD
   size: 100GB

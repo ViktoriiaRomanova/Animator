@@ -7,19 +7,19 @@ from peft import get_peft_model, LoraConfig
 from torch import Generator, nn, Tensor, utils, cuda
 
 
-def checkpoint_forward(module, *args, is_ds_checkpointing: bool=False):
+def checkpoint_forward(module, *args, is_ds_checkpointing: bool=True):
+    if not module.training:
+        return module(*args)
     if is_ds_checkpointing:
         # Do not use checkpoint_in_cpu = True since it doesn't reduce memory due to down_skip
         # if checkpoint_in_cpu == True change down_skip.append(x) -> down_skip.append(x.clone())
         # and move them on cpu and back
-        return deepspeed.checkpointing.checkpoint(module, *args)
+        #return deepspeed.checkpointing.checkpoint(module, *args)
+        return deepspeed.checkpointing.non_reentrant_checkpoint(module, *args)
 
     else:
-        #cuda.reset_peak_memory_stats()
         x = utils.checkpoint.checkpoint(module, *args, use_reentrant=False)
-        #peak = cuda.max_memory_allocated()
-        #print(f"[Forward mem delta: MB, peak: {peak/1e6:.1f} MB")
-        return  x #module(*args)
+        return x
 
 def encoder_forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
     """Forward method for encoder(AutoencoderKL) with skip connections functionality."""

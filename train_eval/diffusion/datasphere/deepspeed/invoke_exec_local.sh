@@ -25,19 +25,19 @@ cd $(dirname "$0")
 
 TRANSFORM=datasets/diffusion/
 OUTPUT_MODEL=diffusion/train_checkpoints/2025_07_31_18_00/
-#IMODEL=diffusion/train_checkpoints/2025_02_12_16_04_07/1.pt
-PARAMS=diffusion/hyperparameters.yaml
+IMODEL=diffusion/train_checkpoints/2025_07_31_18_00/restart_from_epoch:1
+PARAMS=hyperparameters.yaml
 
 # Automatic move of the necessary data
 #scp train.py remote-machine:$MY_REMOTE_DIR/diffusion # train
 scp -r ../../../../animator remote-machine:$MY_REMOTE_DIR # animator package
-scp hyperparameters.yaml remote-machine:$MY_REMOTE_DIR/diffusion # hyperparameters
+scp hyperparameters.yaml remote-machine:$MY_REMOTE_DIR # hyperparameters
 scp ds_config.json remote-machine:$MY_REMOTE_DIR
 scp ds_config_disc.json remote-machine:$MY_REMOTE_DIR # train
 #scp -r ../../../datasets/diffusion/ remote-machine:$MY_REMOTE_DIR/$TRANSFORM # dataset
 #scp ../diffusion/train_checkpoints/129.pt remote-machine:$MY_REMOTE_DIR/$IMODEL # initial weights (optional)
 
-# !REMINDER do not use deepspeed activation checkpointing!
+# !REMINDER do not use deepspeed activation checkpointing reentrant==True!
 # as, for now (v0.17.2), it is not supporting 
 # "Jointly Training Models With Shared Loss" pipline
 
@@ -54,14 +54,12 @@ docker --context remote-machine run --name animator \
 --rm \
 -w /workspace/ \
 --shm-size=1g \
---gpus all cuda_new:deepspeed17.2 \
-deepspeed diffusion/train.py \
+--gpus all cur_new:deepspeed3 \
+deepspeed train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
 --st ${OUTPUT_MODEL}
-
-#deepspeed diffusion/train.py \
 
 # Get the name of the last obtained weights
 #WNAME=$(ssh remote-machine "find viktoriia/Animator/diffusion/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')

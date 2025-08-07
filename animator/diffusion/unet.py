@@ -11,7 +11,9 @@ class CheckpointedSubModule(nn.Module):
         self.name = name
 
     def forward(self, *args, **kwargs) -> Tensor:
-        #return self.check_memory(self.sub_module, *args, **kwargs)
+        if not self.sub_module.training:
+            return self.sub_module(*args, **kwargs)
+        # For now, there is no way to use deepspeed checkpointing in conjunction with kwargs. 
         return utils.checkpoint.checkpoint(self.sub_module, *args, use_reentrant=False, **kwargs)
 
     def __getattr__(self, name):
@@ -66,17 +68,18 @@ class LoRaUNet2DConditionModel(nn.Module):
         )
         self.unet = get_peft_model(self.unet, lora_config)
         
-        #module = self.unet.get_submodule("base_model.model.mid_block")
+        # module = self.unet.get_submodule("base_model.model.mid_block")
         # sub_module = CheckpointedSubModule(module, "mid_block")
         # self.unet.set_submodule("base_model.model.mid_block", sub_module)
 
-        #for ind, module in enumerate(self.unet.get_submodule("base_model.model.down_blocks")):
-        #    sub_module = CheckpointedSubModule(module, f"down_block{ind}")
-        #    self.unet.set_submodule("base_model.model.down_blocks.{}".format(ind), sub_module)
-        #    if ind == 2: break
-        #for ind, module in enumerate(self.unet.get_submodule("base_model.model.up_blocks")):
-        #    sub_module = CheckpointedSubModule(module, f"up_block{ind}")
-        #    self.unet.set_submodule("base_model.model.up_blocks.{}".format(ind), sub_module)
-        #    if ind == 2: break
+        for ind, module in enumerate(self.unet.get_submodule("base_model.model.down_blocks")):
+           sub_module = CheckpointedSubModule(module, f"down_block{ind}")
+           self.unet.set_submodule("base_model.model.down_blocks.{}".format(ind), sub_module)
+           if ind == 2: break
+        for ind, module in enumerate(self.unet.get_submodule("base_model.model.up_blocks")):
+           sub_module = CheckpointedSubModule(module, f"up_block{ind}")
+           self.unet.set_submodule("base_model.model.up_blocks.{}".format(ind), sub_module)
+           if ind == 2: break
+
     def forward(self, *args, **kwargs):
         return self.unet(*args, **kwargs)
