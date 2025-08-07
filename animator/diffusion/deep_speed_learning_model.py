@@ -232,17 +232,24 @@ class DiffusionLearning:
 
         cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
 
-        idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+        #idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
 
-        loss = adv_lossA + adv_lossB + cycle_loss + idn_loss
+        loss = adv_lossA + adv_lossB + cycle_loss # + idn_loss
 
         self.metrics.update("Total_loss", "gens", loss.detach().clone())
         self.metrics.update("Adv_gen", "discA", adv_lossA.detach().clone())
         self.metrics.update("Adv_gen", "discB", adv_lossB.detach().clone())
         self.metrics.update("Cycle", "loss", cycle_loss.detach().clone())
-        self.metrics.update("Identity", "loss", idn_loss.detach().clone())
+        #self.metrics.update("Identity", "loss", idn_loss.detach().clone())
 
         return loss
+    
+    def forward_backward_identity(self, X: torch.Tensor, Y: torch.Tensor) -> None:
+        idn_loss = self.idn_loss(self.genB(X), self.genA(Y), X, Y)
+
+        self.metrics.update("Identity", "loss", idn_loss.detach().clone())
+
+        self.backward_gen(idn_loss)
 
     def forward_disc(
         self, X: torch.Tensor, Y: torch.Tensor, adv_alpha: float = 0.5
@@ -292,17 +299,6 @@ class DiffusionLearning:
     def execute(
         self,
     ) -> None:
-        for name, model in [("genA", self.genA), ("genB", self.genB), ("discA", self.discA), ("discB", self.discB)]:
-            model._had_backward = 0
-            def make_hook(name, model):
-                def hook(grad):
-                    model._had_backward += 1
-                return hook
-            for p in model.parameters():
-                if p.requires_grad:
-                    p.register_hook(make_hook(name, model))
-
-
         for epoch in range(self.start_epoch, self.epochs):
             self.train_loader.data_sampler.set_epoch(epoch)
 
@@ -315,13 +311,11 @@ class DiffusionLearning:
                 y_batch = y_batch.to(self.device)#, dtype=torch.float16)
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
+                self.forward_backward_identity(x_batch, y_batch)
                 loss_disc_A, loss_disc_B = self.forward_disc(
                     self.modifier(x_batch), self.modifier(y_batch), self.adv_alpha
                 )
                 self.backward_disc(loss_disc_A, loss_disc_B)
-
-                print("GEN BACKWARD STATUS:", self.genA._had_backward, self.genB._had_backward)
-                print("DISC BACKWARD STATUS:", self.discA._had_backward, self.discB._had_backward)
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
 
