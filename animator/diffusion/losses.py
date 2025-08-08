@@ -24,7 +24,7 @@ class CycleLoss(nn.Module):
         else:
             raise NotImplementedError("Cycle loss type {} is not implemented".format(ltype))
 
-    def __call__(
+    def forward(
         self, obtained_X: torch.Tensor, obtained_Y: torch.Tensor, real_X: torch.Tensor, real_Y: torch.Tensor
     ) -> torch.Tensor:
         obtained_X = obtained_X.to(self.device)
@@ -58,7 +58,7 @@ class IdentityLoss(nn.Module):
         else:
             raise NotImplementedError("Identity loss type {} is not implemented".format(ltype))
 
-    def __call__(
+    def forward(
         self,
         obtained_from_X: torch.Tensor,
         obtained_from_Y: torch.Tensor,
