@@ -87,9 +87,14 @@ class DiffusionLearning:
             )
         else:
             # TMP!!!!
-            def dummy(x):
-                return x
-            self.modifier = dummy
+            class dummy:
+                def __init__(self,):
+                    pass
+                def warm_up_update(self, delta):
+                    pass
+                def __call__(self, x):
+                    return x
+            self.modifier = dummy()
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
 
         self.genA, self.optim_genA, self.train_loader, _ = deepspeed.initialize(
