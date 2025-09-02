@@ -2,7 +2,6 @@ from transformers import CLIPVisionModel, CLIPImageProcessor
 import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
-from torchvision.transforms import Normalize
 
 from animator.diffusion.blurpool import BlurPool
 from animator.utils.DiffAugment_pytorch import DiffAugment
@@ -45,15 +44,19 @@ class Discriminator(nn.Module):
     ) -> None:
 
         super().__init__()
-        self.clip_model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        if cv_type.lower() == 'clip':
+            self.clip_model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        else:
+            raise NotImplementedError("Incorrect core model type, use 'clip'")
+        processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.clip_model.requires_grad_(False)
-        self.image_processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        self.decoder = MultiLevelDViT()
-
-        self.image_processor.do_center_crop = False
-        self.image_processor.do_convert_rgb = False
-        self.image_processor.do_rescale = False
+        self.image_mean = torch.tensor(processor.image_mean).reshape(1,3,1,1)
+        self.image_std = torch.tensor(processor.image_std).reshape(1,3,1,1)
+        self.image_size = tuple([processor.size["shortest_edge"]] * 2)
+        if output_type.lower() == "conv_multi_level":
+            self.decoder = MultiLevelDViT()
+        else:
+            raise NotImplementedError("Incorrect decoder model type, use 'conv_multi_level'")
         self.diffaug_policy = "color,translation,cutout"
 
     def train(self, mode: bool = True):
@@ -62,5 +65,14 @@ class Discriminator(nn.Module):
         return self
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        x = self.image_processor.preprocess(x)
+        x = nn.functional.interpolate(x, size=self.image_size, mode='area')
+        x = DiffAugment(x, policy=self.diffaug_policy)
+        x = (x - self.image_mean) / self.image_std
         output = self.clip_model(x, output_hidden_states=True)
+        print([x.shape for x in output.hidden_states])
+
+
+if __name__ == "__main__":
+    model = Discriminator("clip")
+    x = torch.rand(1, 3, 300,300)
+    model(x)
