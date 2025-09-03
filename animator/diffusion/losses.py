@@ -76,3 +76,33 @@ class IdentityLoss(nn.Module):
             + self.loss(obtained_from_Y, real_Y) * self.lambda_idn
             + self.lpips(obtained_from_Y, real_Y) * self.lambda_lpips
         )
+
+
+class MultilevelLoss(nn.Module):
+    """
+    Implementation adapted from vision_aided_loss library:
+    https://github.com/nupurkmr9/vision-aided-gan
+
+    """
+
+    def __init__(self, alpha: float = 1.0):
+        super().__init__()
+        self.lossfn = nn.BCEWithLogitsLoss(reduction="none")
+        self.alpha = alpha
+
+    def forward(self, input: tuple[torch.Tensor], for_real: bool = True, for_G: bool = False) -> torch.Tensor:
+        if for_G:
+            for_real = True
+        if for_real:
+            target = self.alpha * torch.tensor(1.0)
+        else:
+            target = torch.tensor(0.0)
+
+        loss = 0
+        for x in input:
+            target_ = target.expand_as(xh).to(x.device)
+            loss_ = self.lossfn(x, target_)
+            if len(loss_.size()) > 2:
+                loss_ = loss_.mean([1, 2]).reshape(-1, 1)
+            loss += loss_
+        return loss
