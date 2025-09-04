@@ -59,9 +59,9 @@ deepspeed train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
---imodel ${IMODEL} \
 --st ${OUTPUT_MODEL}
 
+# --imodel ${IMODEL} \
 # Get the name of the last obtained weights
 #WNAME=$(ssh remote-machine "find viktoriia/Animator/diffusion/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')
 

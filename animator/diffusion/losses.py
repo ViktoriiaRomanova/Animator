@@ -87,7 +87,7 @@ class MultilevelLoss(nn.Module):
 
     def __init__(self, alpha: float = 1.0):
         super().__init__()
-        self.lossfn = nn.BCEWithLogitsLoss(reduction="none")
+        self.lossfn = nn.BCEWithLogitsLoss()
         self.alpha = alpha
 
     def forward(self, input: tuple[torch.Tensor], for_real: bool = True, for_G: bool = False) -> torch.Tensor:
@@ -100,9 +100,7 @@ class MultilevelLoss(nn.Module):
 
         loss = 0
         for x in input:
-            target_ = target.expand_as(xh).to(x.device)
+            target_ = target.expand_as(x).to(device=x.device, dtype=x.dtype)
             loss_ = self.lossfn(x, target_)
-            if len(loss_.size()) > 2:
-                loss_ = loss_.mean([1, 2]).reshape(-1, 1)
             loss += loss_
         return loss

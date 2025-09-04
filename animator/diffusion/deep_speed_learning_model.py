@@ -8,11 +8,11 @@ import deepspeed.comm
 import torch
 from torch import nn
 from torchrl.data import ReplayBuffer, ListStorage
-from torchvision.transforms import Normalize
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-from vision_aided_loss import Discriminator
+from animator.diffusion.discriminator import Discriminator
 from tqdm.auto import tqdm
 
+from animator.utils.diffrenorm import DiffRenorm
 from .generator import GANTurboGenerator, get_trainable_params
 from .get_dataset import UnpairedDataset
 from .losses import CycleLoss, IdentityLoss
@@ -55,13 +55,7 @@ class DiffusionLearning:
             for_train=False,
         )
 
-        cur_model_mean = torch.tensor(params.data.mean)
-        cur_model_std = torch.tensor(params.data.std)
-
-        inv_model_std = 1 / cur_model_std
-        inv_model_mean = -cur_model_mean * inv_model_std
-
-        self.renorm_for_fid = Normalize(inv_model_mean, inv_model_std, inplace=False).to(self.device)
+        self.renorm = DiffRenorm(params.data.mean, params.data.std)
 
         # Create forward(A) and reverse(B) models
         self.genA = GANTurboGenerator(params.main.caption_forward, params.generator)
@@ -70,10 +64,11 @@ class DiffusionLearning:
         self.discA = Discriminator(params.discriminator.cv_type, loss_type=params.discriminator.loss_type)
 
         self.discB = Discriminator(params.discriminator.cv_type, loss_type=params.discriminator.loss_type)
-
+       
         # To allow Deep Speed correctly cast the discriminator model on the device
-        self.discA.cv_ensemble.models = nn.ModuleList(self.discA.cv_ensemble.models)
-        self.discB.cv_ensemble.models = nn.ModuleList(self.discB.cv_ensemble.models)
+        # Necessary only for discriminator from vision_aided_loss
+        #self.discA.cv_ensemble.models = nn.ModuleList(self.discA.cv_ensemble.models)
+        #self.discB.cv_ensemble.models = nn.ModuleList(self.discB.cv_ensemble.models)
 
         self.modifier = None
         if params.main.segmentation_model is not None:
@@ -219,7 +214,8 @@ class DiffusionLearning:
 
     def forward_gen(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
-        self.discs.requires_grad_(False)
+        self.discA.decoder.requires_grad_(False)
+        self.discB.decoder.requires_grad_(False)
 
         fakeY_unmodif = self.genA(X)
         fakeY = self.modifier(fakeY_unmodif)
@@ -232,8 +228,8 @@ class DiffusionLearning:
         self.fake_X_buffer.extend(fakeX.detach().clone().to(device="cpu",dtype=torch.float32))
         self.fake_Y_buffer.extend(fakeY.detach().clone().to(device="cpu",dtype=torch.float32))
 
-        adv_lossA = self.discA(fakeY.float(), for_G=True).mean()
-        adv_lossB = self.discB(fakeX.float(), for_G=True).mean()
+        adv_lossA = self.discA(self.renorm(fakeY), for_G=True)
+        adv_lossB = self.discB(self.renorm(fakeX), for_G=True)
 
         cycle_loss = self.cycle_loss(cycle_fakeX, cycle_fakeY, X, Y)
 
@@ -260,17 +256,17 @@ class DiffusionLearning:
         self, X: torch.Tensor, Y: torch.Tensor, adv_alpha: float = 0.5
     ) -> tuple[torch.Tensor, torch.Tensor]:
 
-        self.discs.requires_grad_(True)
+        self.discA.decoder.requires_grad_(True)
+        self.discB.decoder.requires_grad_(True)
 
-        lossA_false = (
-            self.discA(self.fake_Y_buffer.sample().to(self.device), for_real=False).mean() * adv_alpha
-        )
-        lossB_false = (
-            self.discB(self.fake_X_buffer.sample().to(self.device), for_real=False).mean() * adv_alpha
-        )
+        fake_Y = self.fake_Y_buffer.sample().to(self.device)
+        fake_X = self.fake_X_buffer.sample().to(self.device)
 
-        lossA_true = self.discA(Y.float(), for_real=True).mean() * adv_alpha
-        lossB_true = self.discB(X.float(), for_real=True).mean() * adv_alpha
+        lossA_false = self.discA(self.renorm(fake_Y), for_real=False) * adv_alpha        
+        lossB_false = self.discB(self.renorm(fake_X), for_real=False) * adv_alpha
+
+        lossA_true = self.discA(self.renorm(Y), for_real=True) * adv_alpha
+        lossB_true = self.discB(self.renorm(X), for_real=True) * adv_alpha
 
         lossA = lossA_true + lossA_false
         lossB = lossB_true + lossB_false
@@ -313,7 +309,7 @@ class DiffusionLearning:
                 torch.distributed.barrier(device_ids=[self.rank])
 
                 x_batch = x_batch.to(self.device)
-                y_batch = y_batch.to(self.device)#, dtype=torch.float16)
+                y_batch = y_batch.to(self.device)
                 loss = self.forward_gen(x_batch, y_batch)
                 self.backward_gen(loss)
                 self.forward_backward_identity(x_batch, y_batch)
@@ -328,12 +324,12 @@ class DiffusionLearning:
             self.gens.eval()
             for x_batch, y_batch in tqdm(self.val_loader):
                 with torch.no_grad():
-                    x_batch = x_batch.to(self.device, non_blocking=True)#, dtype=torch.float16)
-                    y_batch = y_batch.to(self.device, non_blocking=True) #, dtype=torch.float16)
+                    x_batch = x_batch.to(self.device, non_blocking=True)
+                    y_batch = y_batch.to(self.device, non_blocking=True)
                     fakeY = self.genA(x_batch)
                     fakeX = self.genB(y_batch)
-                    self.metrics.update("FID", "Forward", fakeY, self.renorm_for_fid(y_batch))
-                    self.metrics.update("FID", "Backward", fakeX, self.renorm_for_fid(x_batch))
+                    self.metrics.update("FID", "Forward", fakeY, self.renorm(y_batch))
+                    self.metrics.update("FID", "Backward", fakeX, self.renorm(x_batch))
 
             self.metrics.epoch = epoch
 

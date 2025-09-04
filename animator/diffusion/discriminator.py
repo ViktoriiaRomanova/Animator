@@ -4,7 +4,8 @@ from torch import nn
 from torch.nn.utils import spectral_norm
 
 from animator.diffusion.blurpool import BlurPool
-from animator.utils.DiffAugment_pytorch import DiffAugment
+from animator.diffusion.losses import MultilevelLoss
+from animator.utils.diffaugment import DiffAugment
 
 
 class MultiLevelDViT(nn.Module):
@@ -50,18 +51,21 @@ class Discriminator(nn.Module):
         diffaug: bool = True,
         **kwargs,
     ) -> None:
-
         super().__init__()
+
         if cv_type.lower() == "clip":
             model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
             self.clip_model = model.vision_model
             self.visual_projection = model.visual_projection
+            self.visual_projection.weight = nn.Parameter(self.visual_projection.weight.contiguous())
+            self.clip_model.requires_grad_(False)
+            self.visual_projection.requires_grad_(False)
             processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
         else:
             raise NotImplementedError("Incorrect core model type, use 'clip'")
-        self.clip_model.requires_grad_(False)
-        self.image_mean = torch.tensor(processor.image_mean).reshape(1, 3, 1, 1)
-        self.image_std = torch.tensor(processor.image_std).reshape(1, 3, 1, 1)
+
+        self.register_buffer("image_mean", torch.tensor(processor.image_mean).reshape(1, 3, 1, 1))
+        self.register_buffer("image_std", torch.tensor(processor.image_std).reshape(1, 3, 1, 1))
         self.image_size = tuple([processor.size["shortest_edge"]] * 2)
         if output_type.lower() == "conv_multi_level":
             self.decoder = MultiLevelDViT()
@@ -69,29 +73,26 @@ class Discriminator(nn.Module):
             raise NotImplementedError("Incorrect decoder model type, use 'conv_multi_level'")
 
         self.diffaug_policy = "color,translation,cutout" if diffaug else ""
+        self.loss = None
+        if loss_type == "multilevel_sigmoid":
+            self.loss = MultilevelLoss()
 
     def train(self, mode: bool = True):
         self.clip_model.train(False)
         self.decoder.train(mode)
         return self
 
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor | tuple[torch.Tensor]:
         x = nn.functional.interpolate(x, size=self.image_size, mode="area")
         x = DiffAugment(x, policy=self.diffaug_policy)
-        x = (x - self.image_mean) / self.image_std
+        x = ((x - self.image_mean) / self.image_std)
         output = self.clip_model(x, output_hidden_states=True)
-        x = (output.hidden_states[4][:, 1:, :].permute(0, 2, 1).reshape(-1, 768, 7, 7),
-             output.hidden_states[8][:, 1:, :].permute(0, 2, 1).reshape(-1, 768, 7, 7),
-             self.visual_projection(output.pooler_output))
-        print([i.shape for i in x])
+        x = (
+            output.hidden_states[4][:, 1:, :].permute(0, 2, 1).contiguous().reshape(-1, 768, 7, 7),
+            output.hidden_states[8][:, 1:, :].permute(0, 2, 1).contiguous().reshape(-1, 768, 7, 7),
+            self.visual_projection(output.pooler_output),
+        )
         x = self.decoder(x)
-        print([i.shape for i in x])
-
-
-
-if __name__ == "__main__":
-    #from vision_aided_loss.cvmodel import CLIP
-    #model = CLIP("conv_multi_level")
-    model = Discriminator("clip")
-    x = torch.rand(1, 3, 512, 512)
-    model(x)
+        if self.loss is not None:
+            return self.loss(x, **kwargs)
+        return x
