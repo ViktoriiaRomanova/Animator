@@ -24,8 +24,8 @@ set -e
 cd $(dirname "$0")
 
 TRANSFORM=datasets/diffusion/
-OUTPUT_MODEL=diffusion/train_checkpoints/2025_07_31_18_00/
-IMODEL=diffusion/train_checkpoints/2025_07_31_18_00/restart_from_epoch:0
+OUTPUT_MODEL=diffusion/train_checkpoints/2025_09_05_03_35/
+IMODEL=diffusion/train_checkpoints/2025_09_05_03_35/restart_from_epoch:6
 PARAMS=hyperparameters.yaml
 
 # Automatic move of the necessary data
@@ -59,9 +59,9 @@ deepspeed train.py \
 --dataset ${TRANSFORM} \
 --omodel ${OUTPUT_MODEL} \
 --params ${PARAMS} \
+--imodel ${IMODEL} \
 --st ${OUTPUT_MODEL}
 
-# --imodel ${IMODEL} \
 # Get the name of the last obtained weights
 #WNAME=$(ssh remote-machine "find viktoriia/Animator/diffusion/train_checkpoints/ -type f -printf '%T@ %p\n' | sort -k1,1nr | head -1" | awk '{print $2}')
 

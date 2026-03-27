@@ -26,7 +26,7 @@ class AdversarialLoss(nn.Module):
         else:
             return self.fake.expand_as(input)
 
-    def __call__(self, input: torch.Tensor, target_is_real: bool) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, target_is_real: bool) -> torch.Tensor:
         return self.loss(input, self.__make_target_tensor(target_is_real, input))
     
 
@@ -40,7 +40,7 @@ class CycleLoss(nn.Module):
         else:
             raise NotImplementedError('Cycle loss type {} is not implemented'.format(ltype))
     
-    def __call__(self, obtained_X: torch.Tensor, obtained_Y: torch.Tensor,
+    def forward(self, obtained_X: torch.Tensor, obtained_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
         #return self.loss(obtained_X, real_X) * self.lambda_A + \
             # + self.loss(obtained_Y, real_Y) * self.lambda_B
@@ -56,7 +56,7 @@ class IdentityLoss(nn.Module):
         else:
             raise NotImplementedError('Identity loss type {} is not implemented'.format(ltype))
 
-    def __call__(self, obtained_from_X: torch.Tensor, obtained_from_Y: torch.Tensor,
+    def forward(self, obtained_from_X: torch.Tensor, obtained_from_Y: torch.Tensor,
                  real_X: torch.Tensor, real_Y: torch.Tensor) -> torch.Tensor:
         #return (self.loss(obtained_from_X, real_X) + self.loss(obtained_from_Y, real_Y)) * self.lambda_idn
         return self.loss(obtained_from_X, real_X) * self.lambda_idn, self.loss(obtained_from_Y, real_Y) * self.lambda_idn

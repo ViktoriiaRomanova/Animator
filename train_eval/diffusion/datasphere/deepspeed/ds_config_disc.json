@@ -1,15 +1,15 @@
 {
     "train_micro_batch_size_per_gpu": 1,
-    "gradient_accumulation_steps": 8,
+    "gradient_accumulation_steps": 4,
     "fp16": {
-      "enabled": true,
-      "auto_cast": true,
+      "enabled": false,
+      "auto_cast": false,
       "initial_scale_power": 8
     },
     "optimizer": {
     "type": "AdamW",
     "params": {
-      "lr": 1.0e-2,
+      "lr": 1.0e-5,
       "betas": [
         0.9,
         0.999
@@ -19,15 +19,7 @@
     }
   },
     "zero_optimization": {
-        "stage": 1,
-        "offload_optimizer": {
-            "device": "cpu",
-            "pin_memory": true
-        },
-        "offload_param": {
-            "device": "cpu",
-            "pin_memory": true
-        },
+        "stage": 0,
         "allgather_partitions": true,
         "allgather_bucket_size": 1e6,
         "reduce_scatter": true,

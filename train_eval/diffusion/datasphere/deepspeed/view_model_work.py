@@ -12,10 +12,10 @@ from animator.utils.img_processing import ImgProcessing, ModelImgProcessing
 from animator.utils.parameter_storages.ds_diffusion_parameters import DSDiffusionTrainingParams
 
 HYPERPARAMETERS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/deepspeed/hyperparameters.yaml"
-MODEL1_WEIGHTS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/deepspeed/train_checkpoints/0/pytorch_model.bin"
+MODEL1_WEIGHTS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/deepspeed/train_checkpoints/epoch_2_genA/mp_rank_00_model_states.pt"
 MODEL2_WEIGHTS = "/home/viktoriia/Projects/Animator/Animator/train_eval/diffusion/datasphere/train_checkpoints/before/pytorch_model.bin"
-IMG_PATH = "../../../../datasets/diffusion/domainX"
-#IMG_PATH = "/home/viktoriia/Pictures/tmp"
+#IMG_PATH = "../../../../datasets/diffusion/domainX"
+IMG_PATH = "/home/viktoriia/Pictures/tmp"
 
 
 if __name__ == "__main__":
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     batch_size = 1  # keep batch_size == 1 for different size images
     # dataloader can't combine images of different size
-    names = get_data(IMG_PATH)[20:21]#[1:2]
+    names = get_data(IMG_PATH)[1:2]#[20:25]#[1:2]
     imges = PostProcessingDataset(
         IMG_PATH,
         names,
@@ -50,6 +50,7 @@ if __name__ == "__main__":
         MODEL1_WEIGHTS,
         strict=False,
         mode="simple",
+        model_name='module',
         transform=img_transformation,
     )
     

@@ -10,7 +10,7 @@ class Logger:
 
         Data taken from remote machine stdout which stored by datasphere at stdout.txt.
     """
-    def __init__(self, data_path: str, log_path: str | None = None,
+    def __init__(self, data_path: str, mode: str, log_path: str | None = None,
                  sleep: int = 30, wait: int = 20):
         """
             Creats tensorboard writer to store training log.
@@ -27,6 +27,7 @@ class Logger:
         self.data_path = data_path
         self.sleep = sleep
         self.wait = wait
+        self.mode = mode
 
         self.log_path = log_path
         if log_path is None:
@@ -40,7 +41,7 @@ class Logger:
         """Starts metrics collection for SammaryWrighter."""
         # Time last collected data 
         last_update_time = time.time()
-
+        ind = 0
         with open(self.data_path) as stdout_file:
             while time.time() - last_update_time < self.wait * 60:
                 line = stdout_file.readline()
@@ -55,6 +56,7 @@ class Logger:
                         continue
                     for main_tag in metrics:
                         if main_tag == 'epoch': continue
-                        self.writer.add_scalars(main_tag, metrics[main_tag], metrics['epoch'])
+                        self.writer.add_scalars(main_tag, metrics[main_tag], ind if self.mode == 'ind' else metrics['epoch'])
+                    ind += 1
 
                     last_update_time = time.time()

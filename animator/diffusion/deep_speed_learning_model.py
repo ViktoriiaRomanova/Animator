@@ -91,26 +91,27 @@ class DiffusionLearning:
                     return x
             self.modifier = dummy()
             warn("The segmentation model isn't provided, the segmentation part will be skiped")
-
+        params_genA = get_trainable_params(self.genA, print_num=True)
+        params_genB = get_trainable_params(self.genB, print_num=True)
+        params_discA = get_trainable_params(self.discA, print_num=True)
+        params_discB = get_trainable_params(self.discB, print_num=True)
         self.genA, self.optim_genA, self.train_loader, _ = deepspeed.initialize(
-            model=self.genA, training_data=train_set, config=self.init_args.ds_config
+            model=self.genA, model_parameters=params_genA, training_data=train_set, config=self.init_args.ds_config
         )
         self.genB, self.optim_genB, _, _ = deepspeed.initialize(
-            model=self.genB, config=self.init_args.ds_config
+            model=self.genB, model_parameters=params_genB, config=self.init_args.ds_config
         )
         self.discA, self.optim_discA, self.val_loader, _ = deepspeed.initialize(
-            model=self.discA, training_data=val_set, config=self.init_args.ds_config_disc
+            model=self.discA, model_parameters=params_discA, training_data=val_set, config=self.init_args.ds_config_disc
         )
         self.discB, self.optim_discB, _, _ = deepspeed.initialize(
-            model=self.discB, config=self.init_args.ds_config_disc
+            model=self.discB, model_parameters=params_discB, config=self.init_args.ds_config_disc
         )
 
         self.batch_size = self.train_loader.batch_size
 
         self.gens = nn.ModuleList([self.genA, self.genB])
         self.discs = nn.ModuleList([self.discA, self.discB])
-
-        # self.gens_trainable_params = get_trainable_params(self.gens, True)
 
         self.models = nn.ModuleList([self.genA, self.discA, self.genB, self.discB])
 
@@ -167,8 +168,8 @@ class DiffusionLearning:
         # to get different (from previous use) random numbers after loading the model
         random.seed(self.rank + self.start_epoch)
 
-    def save_model(self, epoch: int) -> None:
-        if (epoch + 1) % self.save_step != 0:
+    def save_model(self, epoch: int, steps: int | None = None) -> None:
+        if steps is None and (epoch + 1) % self.save_step != 0:
             return
         state = {}
         state["epoch"] = epoch
@@ -279,13 +280,63 @@ class DiffusionLearning:
         self.metrics.update("Adv_discB", "False", lossB_false.detach().clone())
 
         return lossA, lossB
+    
+    def mem_check(self, optimizer, t):
+        gpu_mem = 0
+        cpu_mem = 0
+
+        for state in optimizer.state.values():
+            for v in state.values():
+                if torch.is_tensor(v):
+                    size = v.numel() * v.element_size()
+                    if v.device.type == "cuda":
+                        gpu_mem += size
+                    else:
+                        cpu_mem += size
+
+        print("{}_GPU:".format(t), gpu_mem / 1e9, "GB")
+        print("{}_CPU:".format(t), cpu_mem / 1e9, "GB")
+    
+    def gradient_memory_split(self, model, t):
+        gpu_mem = 0
+        cpu_mem = 0
+        cpu_par_mem = 0
+        gpu_par_mem = 0
+
+        for p in model.parameters():
+            if p.grad is not None:
+                size = p.grad.numel() * p.grad.element_size()
+                par_size = p.numel() * p.element_size() 
+                if p.grad.device.type == "cuda":
+                    gpu_mem += size
+                    gpu_par_mem += par_size
+                else:
+                    cpu_mem += size
+                    cpu_par_mem += par_size
+
+        print("{}_GPU:".format(t), gpu_mem / 1e9, "GB")
+        print("{}_CPU:".format(t), cpu_mem / 1e9, "GB")
+        print("{}_paramsGPU:".format(t), gpu_par_mem / 1e9, "GB")
+        print("{}_paramsCPU:".format(t), cpu_par_mem / 1e9, "GB")
 
     def backward_gen(self, loss: torch.Tensor) -> None:
         loss.backward()
         self.genA._backward_epilogue()
         self.genB._backward_epilogue()
+        #print("GenA weights vae", self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight[0][0] if self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight is not None else None)
+        #print("GenA grad vae", self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight.grad[0][0] if self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight.grad is not None else None )
+        #print("GenA weights unet", self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight[0][0] if self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight is not None else None)
+        #print("GenA grad unet", self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight.grad[0][0] if self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight.grad is not None else None)
         self.genA.step()
         self.genB.step()
+        #print("GenA weights after vae", self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight[0][0] if self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight is not None else None)
+        #print("GenA grads after vae", self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight.grad[0][0] if self.genA.vae.vae.base_model.model.decoder.skip[0].modules_to_save.default.weight.grad is not None else None )
+        #print("GenA weights unet", self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight[0][0] if self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight is not None else None)
+        #print("GenA grad unet", self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight.grad[0][0] if self.genA.unet.unet.base_model.model.conv_in.modules_to_save.default.weight.grad is not None else None)
+        #self.mem_check(self.genA.optimizer, 'genA')
+        #self.mem_check(self.genB.optimizer, 'genB')
+        #self.gradient_memory_split(self.genA.module, "grad_genA")
+        #self.gradient_memory_split(self.genB.module, "grad_genB")
         self.genA.optimizer.zero_grad()
         self.genB.optimizer.zero_grad()
 
@@ -294,8 +345,12 @@ class DiffusionLearning:
         self.discB.backward(lossB)
         self.discA.step()
         self.discB.step()
-        self.discA.optimizer.zero_grad()
-        self.discB.optimizer.zero_grad()
+        #self.mem_check(self.discA.optimizer, 'discA')
+        #self.mem_check(self.discB.optimizer, 'discB')
+        #self.gradient_memory_split(self.discA.module, "grad_discA")
+        #self.gradient_memory_split(self.discB.module, "grad_discB")
+        #self.discA.optimizer.zero_grad()
+        #self.discB.optimizer.zero_grad()
 
     def execute(
         self,
@@ -305,9 +360,10 @@ class DiffusionLearning:
 
             self.models.train()
 
-            for x_batch, y_batch in tqdm(self.train_loader):
+            for step, (x_batch, y_batch) in tqdm(enumerate(self.train_loader)):
                 torch.distributed.barrier(device_ids=[self.rank])
 
+                #torch.cuda.reset_peak_memory_stats()
                 x_batch = x_batch.to(self.device)
                 y_batch = y_batch.to(self.device)
                 loss = self.forward_gen(x_batch, y_batch)
@@ -317,25 +373,31 @@ class DiffusionLearning:
                     self.modifier(x_batch), self.modifier(y_batch), self.adv_alpha
                 )
                 self.backward_disc(loss_disc_A, loss_disc_B)
+                #print('genA', self.genA.micro_steps, self.genA.global_steps)
+                #print('discA', self.discA.micro_steps, self.discB.global_steps)
+                #peak = torch.cuda.max_memory_allocated()
+                #print(peak / 1e9, "GB")
 
                 del x_batch, y_batch, loss, loss_disc_A, loss_disc_B
+                if step % 200 == 0:
+                    # Calculate FID
+                    self.gens.eval()
+                    for x_batch, y_batch in tqdm(self.val_loader):
+                        with torch.no_grad():
+                            x_batch = x_batch.to(self.device, non_blocking=True)
+                            y_batch = y_batch.to(self.device, non_blocking=True)
+                            fakeY = self.genA(x_batch)
+                            fakeX = self.genB(y_batch)
+                            self.metrics.update("FID", "Forward", fakeY, self.renorm(y_batch))
+                            self.metrics.update("FID", "Backward", fakeX, self.renorm(x_batch))
 
-            # Calculate FID
-            self.gens.eval()
-            for x_batch, y_batch in tqdm(self.val_loader):
-                with torch.no_grad():
-                    x_batch = x_batch.to(self.device, non_blocking=True)
-                    y_batch = y_batch.to(self.device, non_blocking=True)
-                    fakeY = self.genA(x_batch)
-                    fakeX = self.genB(y_batch)
-                    self.metrics.update("FID", "Forward", fakeY, self.renorm(y_batch))
-                    self.metrics.update("FID", "Backward", fakeX, self.renorm(x_batch))
+                    self.metrics.epoch = epoch
 
-            self.metrics.epoch = epoch
-
-            # Send metrics into stdout. This channel going to be transferred into initial machine.
-            self.metrics.compute()
-            self.metrics.reset()
+                    # Send metrics into stdout. This channel going to be transferred into initial machine.
+                    self.metrics.compute()
+                    self.metrics.reset()
+                    self.models.train()
+                    self.save_model(epoch, step)
 
             # Save model checkpoint every "save_step"(hyperparameters -> main)
             self.save_model(epoch)

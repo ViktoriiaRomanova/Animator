@@ -26,8 +26,8 @@ OUTPUT_MODEL=train_checkpoints/
 IMODEL=train_checkpoints/2025_04_18_10_21_01/restart_from_epoch:1
 PARAMS=hyperparameters.yaml
 
-CUR_HOST=name@PI
-MY_REMOTE_DIR=/home/name/animator/
+CUR_HOST=alexr@213.165.215.137
+MY_REMOTE_DIR=/home/alexr/animator/
 
 docker context update --docker host=ssh://$CUR_HOST compute-vm
 
@@ -42,7 +42,7 @@ scp hyperparameters.yaml $CUR_HOST:$MY_REMOTE_DIR # hyperparameters
 
 docker --context compute-vm run --name animator \
 --mount type=bind,source="$MY_REMOTE_DIR",target=/workspace \
---mount type=bind,source=/home/name/.cache/,target=/root/.cache/ \
+--mount type=bind,source=/home/alexr/.cache/,target=/root/.cache/ \
 --rm \
 -w /workspace/ \
 --shm-size=1g \

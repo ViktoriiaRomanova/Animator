@@ -26,10 +26,15 @@ def encoder_forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
     down_skip = []
     x = self.conv_in(x)
     #x.register_hook(lambda grad: print(grad))
+    num_to_checkpoint = 0
     for ind, down_block in enumerate(self.down_blocks):
         down_skip.append(x)
-        x = checkpoint_forward(down_block, x)
-    x = checkpoint_forward(self.mid_block, x)
+        if ind < num_to_checkpoint:
+            x = checkpoint_forward(down_block, x)
+        else:
+            x = down_block(x)
+    #x = checkpoint_forward(self.mid_block, x)
+    x = self.mid_block(x)
     x = self.conv_norm_out(x)
     x = self.conv_act(x)
     x = self.conv_out(x)
@@ -41,8 +46,9 @@ def decoder_forward(
 ) -> Tensor:
     """Forward method for decoder(AutoencoderKL) with skip connections functionality."""
     x = self.conv_in(x)
-    x = checkpoint_forward(self.mid_block, x)
+    #x = checkpoint_forward(self.mid_block, x)
     len_skip = len(incoming_skip) - 1
+    num_to_checkpoint = 0
     if len_skip == -1:
         warn("Missing skip connection data")
         for up_block in self.up_blocks:
@@ -50,7 +56,10 @@ def decoder_forward(
     else:
         for ind, up_block in enumerate(self.up_blocks):
             up_skip = self.skip[ind](incoming_skip[len_skip - ind] * self.gamma)
-            x = checkpoint_forward(up_block, x + up_skip, latent_embeds)
+            if ind < num_to_checkpoint:
+                x = checkpoint_forward(up_block, x + up_skip, latent_embeds)
+            else:
+                x = up_block(x + up_skip, latent_embeds)
     if latent_embeds is None:
         x = self.conv_norm_out(x)
     else:
@@ -117,8 +126,8 @@ class SCAutoencoderKL(nn.Module):
         lora_config = LoraConfig(
             r=rank,
             init_lora_weights="gaussian",
-            target_modules=encoder_param_names + module_names_to_keep,
-            #modules_to_save=module_names_to_keep,
+            target_modules=encoder_param_names, #+ module_names_to_keep,
+            modules_to_save=module_names_to_keep,
         )
         self.vae = get_peft_model(self.vae, lora_config)
 

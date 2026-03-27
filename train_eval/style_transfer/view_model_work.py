@@ -13,8 +13,8 @@ HYPERPARAMETERS = 'train_eval/style_transfer/hyperparameters.yaml'
 MODEL1_WEIGHTS = 'train_eval/local/train_checkpoints/199_old.pt'
 MODEL2_WEIGHTS = 'train_eval/style_transfer/train_checkpoints/ukiyoe/199.pt'
 #IMG_PATH = 'datasets/transform/domainX'
-#IMG_PATH = '/home/viktoriia/Pictures/tmp/'
-IMG_PATH = '/home/viktoriia/Downloads/transfer_test/domainY'
+IMG_PATH = '/home/viktoriia/Pictures/tmp/'
+#IMG_PATH = '/home/viktoriia/Downloads/transfer_test/domainY'
 
 
 if __name__ == '__main__':
@@ -22,7 +22,7 @@ if __name__ == '__main__':
         data_transform = TrainingParams(**yaml.safe_load(file)).data
     batch_size = 1 # keep batch_size == 1 for different size images 
     # dataloader can't combine images of different size
-    names = get_data(IMG_PATH)[20:25]
+    names = get_data(IMG_PATH)[4:5]
     imges = PostProcessingDataset(IMG_PATH, names,
                                   data_transform.size,
                                   data_transform.mean,
@@ -36,19 +36,24 @@ if __name__ == '__main__':
         img = img * tensor(data_transform.std) + tensor(data_transform.mean)
         return img
     
-    model_based_img_processor1 = ModelImgProcessing(Generator(), 'genB', MODEL1_WEIGHTS,
+    model_based_img_processor1 = ModelImgProcessing(Generator(), MODEL1_WEIGHTS,
                                                    mode = 'simple',
+                                                   model_name='genA',
                                                    transform = img_transformation)
-    model_based_img_processor2 = ModelImgProcessing(Generator(), 'genB', MODEL2_WEIGHTS,
+    model_based_img_processor2 = ModelImgProcessing(Generator(), MODEL2_WEIGHTS,
+                                                   model_name='genA',
                                                    mode = 'simple',
                                                    transform = img_transformation)
     img_processor = ImgProcessing(img_transformation)
-
+    #from torchvision.utils import save_image
+    #import torch
     for loaded_img in dataloader:
         fig, axs = plt.subplots(min(len(imges), batch_size), 3, squeeze = False)
         for ax, prev_im, res_im1, res_im2 in zip(axs, img_processor(loaded_img),
                                        model_based_img_processor1(loaded_img),
                                        model_based_img_processor2(loaded_img)):
+            #x = torch.permute(res_im2, (2, 0,1))
+            #save_image(x, '/home/viktoriia/Pictures/tmp/IMG_0503_ukiyo-e.png')
             ax[0].axis('off')
             ax[1].axis('off')
             ax[2].axis('off')

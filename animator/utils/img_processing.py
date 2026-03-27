@@ -15,6 +15,9 @@ class ModelImgProcessing(BaseImgProcessing):
         self.model = model.to(device)
         self.transform = transform
         state = torch.load(path, map_location = device, weights_only = True)
+        #a = state['module']['unet.unet.base_model.model.conv_in.modules_to_save.default.weight'][0][1]
+        #b = self.model.state_dict()['unet.unet.base_model.model.conv_in.modules_to_save.default.weight'][0][1]
+        #print(a - b)
         if model_name is not None:
             state = state[model_name]
         self.model.load_state_dict(state, strict=strict)

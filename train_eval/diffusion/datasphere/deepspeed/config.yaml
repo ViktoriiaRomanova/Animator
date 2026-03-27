@@ -2,7 +2,7 @@ name: diffusion_based_model
 desc: Script for training the cycleGAN-Turbo model (Distributed Data Parallel)
 cmd: >
   deepspeed train.py
-  --st ${RES_STORAGE}/2025_05_26_17_00
+  --st ${RES_STORAGE}/2025_09_08_20_00
   --dataset ${DIFFUSION}/
   --params ${PARAMS}
 env:
@@ -28,7 +28,7 @@ inputs:
   - hyperparameters.yaml: PARAMS
 
 cloud-instance-type:
-  - gt4.1
+  - g2.2
 working-storage:
   type: SSD
   size: 100GB

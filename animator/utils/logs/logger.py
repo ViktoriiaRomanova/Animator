@@ -15,8 +15,9 @@ from .create_summary_wrighter import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', required = True, help = 'required path to stdout.txt file')
+parser.add_argument('--mode', default='epoch', help = 'use as x-axis step "epoch", or data "ind"')
 
 if __name__ == '__main__':
-    data_path = parser.parse_args().path
-    logger = Logger(data_path)
+    params = parser.parse_args()
+    logger = Logger(params.path, params.mode)
     logger.start()
